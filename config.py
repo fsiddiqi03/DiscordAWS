@@ -1,0 +1,5 @@
+TOKEN = "MTE1MjM4NzA4MzkzNjIxOTEzNg.G_5OAZ.s2JLgMit_etfPzW5Bq8qE2mDBOL6CAiZBBrf3g"
+
+secret = "OfbZFoyhbSzc+g5PTEZp4sYIaYWTz4tXRo+iba9z"
+
+key = "AKIAQVERFMULVL4YTTGT"
