@@ -42,6 +42,14 @@ class EC2Manager:
         # script to start the minecraft server 
         # should call the start ec2 method
         # when the start_ec2 instance returns running, run the script command to launch the server. 
+    
+
+    # def find_ip 
+        # simple command to return to the ip of the ec2 instance 
+    
+
+    # def auto_turn_off
+        # check the minecraft server to see if any players are online every 30 mins, if there is no one turn off the ec2 instance. 
 
 
 
