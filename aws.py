@@ -28,6 +28,15 @@ class EC2Manager:
     def stop_ec2(self):
         # stops ec2 instance 
         self.ec2.stop_instances(InstanceIds=[self.instance_id])
+        status = self.check_ec2_status
+        attempts = 20
+        delay = 15
+        if status == "stopping":
+            for i in range(attempts):
+                status = self.check_ec2_status
+                if status == "stopped":
+                    return True
+                time.sleep(delay)
 
     #def start_server(self):
         # script to start the minecraft server 
@@ -38,7 +47,8 @@ class EC2Manager:
 
 ec2_manager = EC2Manager()
 
-status = ec2_manager.check_ec2_status()
+ec2_manager.start_ec2()
+
 
 
 
