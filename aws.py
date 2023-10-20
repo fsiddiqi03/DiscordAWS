@@ -1,5 +1,7 @@
 import boto3
 import time
+from botocore.exceptions import WaiterError
+
 
 class EC2Manager:
     def __init__(self, instance_id="i-0c1ded99c0ff7c3b8", region="us-east-2"):
@@ -12,31 +14,40 @@ class EC2Manager:
         # will return either stopped, running, pending, or stopping
         return state
     
-    def start_ec2(self):        
-        self.ec2.start_instances(InstanceIds=[self.instance_id])
-        status = self.check_ec2_status
-        attempts = 20
-        delay = 15
-        while status == "pending":
-            for i in range(attempts):
-                status = self.check_ec2_status
-                if status == "running":
-                    return True
-                time.sleep(delay)
-            return False
+    def start_ec2(self):
+        status = self.check_ec2_status()
+        if status == "stopped":       
+            try:
+                self.ec2.start_instances(InstanceIds=[self.instance_id])
+                waiter = self.ec2.get_waiter('instance_running')
+                waiter.wait(InstanceIds=[self.instance_id])
+                return True
+            except WaiterError:
+                return False
+        else:
+            return True
         
     def stop_ec2(self):
         # stops ec2 instance 
-        self.ec2.stop_instances(InstanceIds=[self.instance_id])
-        status = self.check_ec2_status
-        attempts = 20
-        delay = 15
-        if status == "stopping":
-            for i in range(attempts):
-                status = self.check_ec2_status
-                if status == "stopped":
-                    return True
-                time.sleep(delay)
+        status = self.check_ec2_status()
+        if status == "running":
+            try:
+                self.ec2.stop_instances(InstanceIds=[self.instance_id])
+                waiter = self.ec2.get_waiter("instance_stopped")
+                waiter.wait(InstanceIds=[self.instance_id])
+                return True
+            except WaiterError:
+                return False
+        return True
+    
+
+
+    def get_ip(self):
+        response = self.ec2.describe_instances(InstanceIds=[self.instance_id])
+        instance = response['Reservations'][0]['Instances'][0]
+        public_ip = instance.get("PublicIpAddress", None)
+        return public_ip
+        
 
     #def start_server(self):
         # script to start the minecraft server 
@@ -44,8 +55,7 @@ class EC2Manager:
         # when the start_ec2 instance returns running, run the script command to launch the server. 
     
 
-    # def find_ip 
-        # simple command to return to the ip of the ec2 instance 
+ 
     
 
     # def auto_turn_off
@@ -55,7 +65,15 @@ class EC2Manager:
 
 ec2_manager = EC2Manager()
 
-ec2_manager.start_ec2()
+ip = ec2_manager.get_ip()
+print(ip)
+
+
+
+
+
+
+
 
 
 

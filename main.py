@@ -3,10 +3,11 @@ from discord import app_commands
 from discord.ext import commands
 from server_status import check_server
 from config import TOKEN
+from aws import EC2Manager
 
 
 
-
+ec2 = EC2Manager()
 
 bot = commands.Bot(command_prefix="!", intents = discord.Intents.all())
 
