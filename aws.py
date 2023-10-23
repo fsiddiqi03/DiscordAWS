@@ -87,8 +87,6 @@ class EC2Manager:
             print(f"Error during SSM connection test: {e}")
             return False
 
-    # Your other methods for starting the server and automatic turn-off...
-
 ec2_manager = EC2Manager()
 
 if ec2_manager.test_ssm_connection():
