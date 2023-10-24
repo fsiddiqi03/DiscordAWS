@@ -32,11 +32,15 @@ async def Start(interaction: discord.Interaction):
                 ip = ec2.get_ip()
                 await interaction.followup.send("server has started with the ip: " + ip)
             else:
-                interaction.followup.send("server had trouble booting, please try again later")
+                await interaction.followup.send("server had trouble booting, please try again later")
     else:
         if ec2.check_server():
             ip = ec2.get_ip()
             await interaction.followup.send("sever is already online with the ip: " + ip)
+        else:
+            ec2.start_minecraft_server()
+            ip = ec2.get_ip()
+            await interaction.followup.send("server has started with the ip: " + ip)
  
 
 
