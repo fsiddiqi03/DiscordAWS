@@ -1,6 +1,8 @@
 import boto3
 import time
 from botocore.exceptions import WaiterError
+from mcstatus import JavaServer
+
 
 
 class EC2Manager:
@@ -48,57 +50,70 @@ class EC2Manager:
         instance = response['Reservations'][0]['Instances'][0]
         public_ip = instance.get("PublicIpAddress", None)
         return public_ip
-        
-
-    #def start_server(self):
-        # script to start the minecraft server 
-        # should check if the ec2 instance is on, if not should call the start ec2 method
-        # when the start_ec2 instance returns running, run the script command to launch the server. 
     
-    
-    def test_ssm_connection(self):
-        try:
-            response = self.ssm.send_command(
-                InstanceIds=[self.instance_id],
-                DocumentName="AWS-RunShellScript",
-                Parameters={
-                    'commands': ['echo "Connection Test Successful!"']
-                }
-            )
 
-            command_id = response['Command']['CommandId']
-            time.sleep(5)  # Sleep for 5 seconds
 
+    def ssm_status(self, command_id):
+        attempts = 13
+        while attempts > 0:
             result = self.ssm.list_command_invocations(
                 CommandId=command_id,
                 InstanceId=self.instance_id,
                 Details=True
             )
+            status = result['CommandInvocations'][0]['Status']
+            if status == "Success":
+                return True
+            elif status in ['Failed', 'Cancelled', 'TimedOut']:
+                return False
+            time.sleep(5)
+            attempts -= 1
+        return False
+    def check_server(self):
+        ip = self.get_ip()
+        server = JavaServer.lookup(ip)
+        try:
+            latency = server.status().latency
+            return True
+        except:
+            return False 
 
-            # Check if the command succeeded
-            if result['CommandInvocations'][0]['Status'] == 'Success':
-                output = result['CommandInvocations'][0]['CommandPlugins'][0]['Output']
-                print(output)
+        
+    # use this function in the discord bot to start the server
+    def start_minecraft_server(self):
+        # attempt to start the minecraft server by sending it a command
+        # use try to catch any errors 
+        try:
+            response = self.ssm.send_command(
+                InstanceIds=[self.instance_id],
+                DocumentName="AWS-RunShellScript",
+                Parameters={
+                    'commands': [
+                        'cd /opt/minecraft/server && java -Xmx1024M -Xms1024M -jar server.jar nogui'
+                    ]
+                }
+            )
+            # get the command Id to check thes status of the ssm command 
+            # use the ssm status method to check the status until it returns true or false
+            command_id = response['Command']['CommandId']
+            if self.ssm_status(command_id):
                 return True
             else:
-                print("Failed to connect via SSM.")
                 return False
         except Exception as e:
-            print(f"Error during SSM connection test: {e}")
             return False
-
-ec2_manager = EC2Manager()
-
-if ec2_manager.test_ssm_connection():
-     print("SSM connection successful!")
-     # Here you can call your method to start the Minecraft server
-else:
-    print("Failed to connect via SSM.")
- 
     
-
     # def auto_turn_off
-        # check the minecraft server to see if any players are online every 30 mins, if there is no one turn off the ec2 instance. 
+    # check the minecraft server to see if any players are online every 30 mins, if there is no one turn off the ec2 instance.
+    def auto_check(self):
+        ip = self.get_ip()
+        if self.check_ec2_status == "running":
+            if self.check_server(ip):
+                self.stop_ec2()
+                return True
+            
+        return False
+            
 
 
 
@@ -108,6 +123,14 @@ else:
 
 
 
+#ec2_manager = EC2Manager()
+#if ec2_manager.test_ssm_connection():
+    #if ec2_manager.start_minecraft_server():
+       # print("Minecraft server started!")
+   # else:
+      #  print("Failed to start Minecraft server.")
+#else:
+   # print("Failed to connect via SSM.")
 
 
 
