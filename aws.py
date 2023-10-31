@@ -22,7 +22,7 @@ class EC2Manager:
         if status == "stopped":       
             try:
                 self.ec2.start_instances(InstanceIds=[self.instance_id])
-                waiter = self.ec2.get_waiter('instance_running')
+                waiter = self.ec2.get_waiter('instance_status_ok')
                 waiter.wait(InstanceIds=[self.instance_id])
                 return True
             except WaiterError:
@@ -46,10 +46,11 @@ class EC2Manager:
 
 
     def get_ip(self):
-        response = self.ec2.describe_instances(InstanceIds=[self.instance_id])
-        instance = response['Reservations'][0]['Instances'][0]
-        public_ip = instance.get("PublicIpAddress", None)
-        return public_ip
+        if self.check_ec2_status() == "running":
+            response = self.ec2.describe_instances(InstanceIds=[self.instance_id])
+            instance = response['Reservations'][0]['Instances'][0]
+            public_ip = instance.get("PublicIpAddress", None)
+            return public_ip
     
 
 
@@ -69,14 +70,17 @@ class EC2Manager:
             time.sleep(5)
             attempts -= 1
         return False
+    
+
     def check_server(self):
-        ip = self.get_ip()
-        server = JavaServer.lookup(ip)
-        try:
-            latency = server.status().latency
-            return True
-        except:
-            return False 
+        if self.check_ec2_status() == "running":
+            ip = self.get_ip()
+            server = JavaServer.lookup(ip)
+            try:
+                latency = server.status().latency
+                return True
+            except:
+                return False 
 
         
     # use this function in the discord bot to start the server
@@ -97,7 +101,12 @@ class EC2Manager:
             # use the ssm status method to check the status until it returns true or false
             command_id = response['Command']['CommandId']
             if self.ssm_status(command_id):
-                return True
+                attempts = 0
+                while attempts < 5:
+                    if self.check_server():
+                        return True
+                    time.sleep(5)
+                    attempts += 1   
             else:
                 return False
         except Exception as e:
@@ -107,7 +116,7 @@ class EC2Manager:
     # check the minecraft server to see if any players are online every 30 mins, if there is no one turn off the ec2 instance.
     def auto_check(self):
         ip = self.get_ip()
-        if self.check_ec2_status == "running":
+        if self.check_ec2_status() == "running":
             if self.check_server(ip):
                 self.stop_ec2()
                 return True
