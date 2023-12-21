@@ -2,7 +2,9 @@ import boto3
 import time
 from botocore.exceptions import WaiterError
 from mcstatus import JavaServer
-
+from mcrcon import MCRcon 
+from randfacts import get_fact
+from config import RCON_PASSWORD
 
 
 class EC2Manager:
@@ -43,8 +45,6 @@ class EC2Manager:
                 return False
         return True
     
-
-
     def get_ip(self):
         if self.check_ec2_status() == "running":
             response = self.ec2.describe_instances(InstanceIds=[self.instance_id])
@@ -52,26 +52,6 @@ class EC2Manager:
             public_ip = instance.get("PublicIpAddress", None)
             return public_ip
     
-
-
-    def ssm_status(self, command_id):
-        attempts = 13
-        while attempts > 0:
-            result = self.ssm.list_command_invocations(
-                CommandId=command_id,
-                InstanceId=self.instance_id,
-                Details=True
-            )
-            status = result['CommandInvocations'][0]['Status']
-            if status == "Success":
-                return True
-            elif status in ['Failed', 'Cancelled', 'TimedOut']:
-                return False
-            time.sleep(5)
-            attempts -= 1
-        return False
-    
-
     def check_server(self):
         if self.check_ec2_status() == "running":
             ip = self.get_ip()
@@ -80,66 +60,93 @@ class EC2Manager:
                 latency = server.status().latency
                 return True
             except:
-                return False 
-
+                return False
+        else:
+            return False
         
     # use this function in the discord bot to start the server
     def start_minecraft_server(self):
         # attempt to start the minecraft server by sending it a command
         # use try to catch any errors 
         try:
-            response = self.ssm.send_command(
+            self.ssm.send_command(
                 InstanceIds=[self.instance_id],
                 DocumentName="AWS-RunShellScript",
                 Parameters={
                     'commands': [
-                        'cd /opt/minecraft/server && java -Xmx1024M -Xms1024M -jar server.jar nogui'
+                        'cd /opt/minecraft/server && screen -dmS minecraft java -Xmx12288M -Xms12288M -jar server.jar nogui'
                     ]
                 }
             )
-            # get the command Id to check thes status of the ssm command 
-            # use the ssm status method to check the status until it returns true or false
-            command_id = response['Command']['CommandId']
-            if self.ssm_status(command_id):
-                attempts = 0
-                while attempts < 5:
-                    if self.check_server():
-                        return True
-                    time.sleep(5)
-                    attempts += 1   
-            else:
-                return False
+            # use while to check the status of the minecraft server after sending the command 
+            # checks the server 15 times in a 75 second window 
+            attempts = 0
+            while attempts < 15:
+                if self.check_server():
+                    return True
+                time.sleep(5)
+                attempts += 1 
+            return False  
         except Exception as e:
+            print(e)
             return False
     
     # def auto_turn_off
     # check the minecraft server to see if any players are online every 30 mins, if there is no one turn off the ec2 instance.
     def auto_check(self):
-        ip = self.get_ip()
-        if self.check_ec2_status() == "running":
-            if self.check_server(ip):
-                self.stop_ec2()
+        if self.check_server():
+            ip = self.get_ip()
+            server = JavaServer.lookup(ip)
+            player_count = server.status().players.online
+            if player_count > 0:
+                return False
+            else:
                 return True
-            
         return False
-            
+    
+
+    
+    #
+    def stop_minecraft(self):
+        ip = self.get_ip()
+        port = 25575
+        password = RCON_PASSWORD
+
+
+        command = "/stop"
+
+        with MCRcon(ip, password, port) as mcr:
+            response = mcr.command(command)
+            print(response)
+        
+        attempts = 0
+        while attempts < 15:
+            if not self.check_server():
+                return True
+            time.sleep(5)
+            attempts += 1 
+        return False 
+        
+
+
+    def random_message(self):
+        ip = self.get_ip()
+        port = 25575
+        password = RCON_PASSWORD
+
+        fact = get_fact(False)
+        command = f"/say {fact}"
+        try:
+            with MCRcon(ip, password, port) as mcr:
+                response = mcr.command(command)
+                print(response)
+        except Exception as e:
+            print(e)
+        
 
 
 
 
-
-
-
-
-
-#ec2_manager = EC2Manager()
-#if ec2_manager.test_ssm_connection():
-    #if ec2_manager.start_minecraft_server():
-       # print("Minecraft server started!")
-   # else:
-      #  print("Failed to start Minecraft server.")
-#else:
-   # print("Failed to connect via SSM.")
 
 
 
