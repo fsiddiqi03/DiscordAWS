@@ -5,10 +5,11 @@ from mcstatus import JavaServer
 from mcrcon import MCRcon 
 from randfacts import get_fact
 from config import RCON_PASSWORD
+from config import instance_id
 
 
 class EC2Manager:
-    def __init__(self, instance_id="i-0c1ded99c0ff7c3b8", region="us-east-2"):
+    def __init__(self, region="us-east-2"):
         self.instance_id = instance_id
         self.ec2 = boto3.client("ec2", region_name=region)
         self.ssm = boto3.client("ssm", region_name=region)
@@ -162,7 +163,8 @@ class EC2Manager:
 
 
 
-
+ec2 = EC2Manager()
+ec2.check_ec2_status()
 
 
 
