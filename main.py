@@ -62,8 +62,7 @@ async def Start(interaction: discord.Interaction):
 @bot.tree.command(name = "shut-down", description= "closes the cloud server and minecraft server")
 async def Stop(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral = True)
-    if ec2.check_ec2_status() == "running":
-        # still need to add a method to get player count to make sure server does not turn off when people are online. 
+    if ec2.check_ec2_status() == "running": 
         if ec2.stop_ec2():
             await interaction.followup.send("Server has been closed")
     else:
@@ -102,14 +101,17 @@ async def restart(interaction: discord.Interaction):
 
 @tasks.loop(minutes=30)
 async def auto_stop():
-    ec2.random_message()
+    player_count = ec2.get_player_count()
     print("checking server")
     try:
-        if ec2.auto_check():
-            ec2.stop_ec2()
+        if player_count == 0:
             print("no active player, turning server off")
+            ec2.stop_ec2()
+        elif player_count == -1:
+            print("server offline")
         else:
-            print("players either online or server off")
+            ec2.random_message()
+            print(f"server online with {player_count} players!")
     except Exception as e:
         print(e)
         
