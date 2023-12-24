@@ -97,6 +97,17 @@ async def restart(interaction: discord.Interaction):
     except Exception as e:
         print(e)
 
+@bot.tree.command(name="status", description= "obtain the status of the cloud and minecraft server")
+async def status(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    try:
+        cloud_status = ec2.check_ec2_status()
+        mc_status = "off"
+        if ec2.check_server():
+            mc_status = "on"
+        await interaction.followup.send(f"**Cloud Status:** {cloud_status}, **Minecraft Server Status:** {mc_status}")
+    except Exception as e:
+        print(e)
 
 
 @tasks.loop(minutes=30)
@@ -121,6 +132,7 @@ async def before_auto_stop():
   
 
 
+  
 
 if __name__ == "__main__":
     bot.run(TOKEN)
