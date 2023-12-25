@@ -4,15 +4,15 @@ from botocore.exceptions import WaiterError
 from mcstatus import JavaServer
 from mcrcon import MCRcon 
 from randfacts import get_fact
-from config import RCON_PASSWORD
-from config import instance_id
+from config import RCON_PASSWORD, instance_id
+
 
 
 class EC2Manager:
     def __init__(self, region="us-east-2"):
         self.instance_id = instance_id
-        self.ec2 = boto3.client("ec2", region_name=region)
-        self.ssm = boto3.client("ssm", region_name=region)
+        self.ec2 = boto3.client("ec2", region_name=region) # used to communicate with the ec2 instane (start, stop, get ip)
+        self.ssm = boto3.client("ssm", region_name=region) # used to send command to the ec2 instance 
 
     # checks the status of the ec2 instance 
     def check_ec2_status(self):
