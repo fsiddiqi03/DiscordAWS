@@ -4,7 +4,7 @@ from botocore.exceptions import WaiterError
 from mcstatus import JavaServer
 from mcrcon import MCRcon 
 from randfacts import get_fact
-from config import RCON_PASSWORD, instance_id
+from config import RCON_PASSWORD, instance_id, port
 
 
 
@@ -13,6 +13,8 @@ class EC2Manager:
         self.instance_id = instance_id
         self.ec2 = boto3.client("ec2", region_name=region) # used to communicate with the ec2 instane (start, stop, get ip)
         self.ssm = boto3.client("ssm", region_name=region) # used to send command to the ec2 instance 
+        self.RCON_PASSWORD = RCON_PASSWORD # used to send commands to minecraft server terminal 
+        self.port = port # port used for sending command remotely to minecraft server terminal
 
     # checks the status of the ec2 instance 
     def check_ec2_status(self):
@@ -124,13 +126,10 @@ class EC2Manager:
     # runs a 75 seconds timer to check when the server is turned off, returning true  
     def stop_minecraft(self):
         ip = self.get_ip()
-        port = 25575
-        password = RCON_PASSWORD
-
 
         command = "/stop"
         
-        with MCRcon(ip, password, port) as mcr:
+        with MCRcon(ip, self.RCON_PASSWORD, self.port) as mcr:
             response = mcr.command(command)
             print(response)
         
@@ -146,13 +145,11 @@ class EC2Manager:
     # use RCON to remotely send a random fact using the random fact python library. 
     def random_message(self):
         ip = self.get_ip()
-        port = 25575
-        password = RCON_PASSWORD
 
         fact = get_fact(False)
         command = f"/say {fact}"
         try:
-            with MCRcon(ip, password, port) as mcr:
+            with MCRcon(ip, self.RCON_PASSWORD, self.port) as mcr:
                 response = mcr.command(command)
                 print(response)
         except Exception as e:
