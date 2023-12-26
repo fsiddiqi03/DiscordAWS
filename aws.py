@@ -160,8 +160,6 @@ class EC2Manager:
 
 
 
-ec2 = EC2Manager()
-ec2.check_ec2_status()
 
 
 
