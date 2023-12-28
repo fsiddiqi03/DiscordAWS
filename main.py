@@ -16,6 +16,7 @@ async def on_ready():
     try:
         synced = await bot.tree.sync()
         print(f"Synced {len(synced)} command(s)")
+        auto_stop.start()
     except Exception as e:
         print(e)
 
@@ -24,7 +25,6 @@ async def on_ready():
 @bot.tree.command(name="start-cloud", description="starts the cloud server for the minecraft server")
 async def Start(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral = True)
-    auto_stop.start()
     try:
         ec2_status = ec2.check_ec2_status()
         if ec2_status == "stopped":
