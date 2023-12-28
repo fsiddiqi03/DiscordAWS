@@ -16,6 +16,8 @@ pip3 install mcstatus
 pip3 install mcrcon
 pip3 install randfacts
 
+# Install AWS CLI
+sudo apt-get install awscli -y
 
 # alert user that setup is complete 
 echo "Setup complete. All necessary libraries installed."
