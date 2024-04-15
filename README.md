@@ -29,3 +29,52 @@ The discord bot runs a check every 30 minutes, where it will the ping the server
 - randomfacts [used to send a random fact to the user playing on the server every 30 minutes]
 
 
+## Installation
+
+Before installing, ensure you have Python 3.x installed on your system. Then, follow these steps to get your bot up and running, you can either run the bot locally or host it in the cloud (AWS, GCP):
+
+### Linux Setup
+
+Run the provided `setup.sh` script:
+
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+### macOS Setup
+
+You'll need Python 3 and pip. After installing these, run:
+
+```bash
+pip3 install discord.py boto3 mcstatus mcrcon randfacts
+brew install awscli
+```
+
+### Windows Setup
+
+Ensure Python and pip are installed on your system. First, install the necessary Python packages including the AWS CLI using pip:
+
+```bash
+pip install discord.py boto3 mcstatus mcrcon randfacts awscli
+pip install awscli
+```
+
+
+## Usage
+
+1. **Set up your bot on Discord and obtain a bot token.**
+
+2. **Create a `config.py` file in the same directory as your bot scripts and define your bot token and AWS credentials:**
+
+   ```python
+   TOKEN = 'your_discord_bot_token'
+   RCON_PASSWORD = 'your_rcon_password'
+   instance_id = 'your_aws_instance_id'
+   port = 25565  # Default Minecraft port
+   ```
+3. Run the bot:
+   
+   ```bash
+   python main.py
+   ```
+
