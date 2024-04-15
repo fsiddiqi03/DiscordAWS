@@ -63,8 +63,15 @@ pip install awscli
 ## Usage
 
 1. **Set up your bot on Discord and obtain a bot token.**
+2. **Configure AWS Credentials:**
+   Before running the bot, you need to configure your AWS credentials to allow the bot to interact with your AWS EC2 instance. Open a terminal and run the following command:
 
-2. **Create a `config.py` file in the same directory as your bot scripts and define your bot token and AWS credentials:**
+   ```bash
+   aws configure
+   ```
+   You'll be prompted to enter your AWS Access Key ID, Secret Access Key, region, and output format. Enter the appropriate details obtained from your AWS account.
+
+3. **Create a `config.py` file in the same directory as your bot scripts and define your bot token and AWS credentials:**
 
    ```python
    TOKEN = 'your_discord_bot_token'
@@ -72,7 +79,7 @@ pip install awscli
    instance_id = 'your_aws_instance_id'
    port = 25565  # Default Minecraft port
    ```
-3. Run the bot:
+4. Run the bot:
    
    ```bash
    python main.py
