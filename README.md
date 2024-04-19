@@ -33,6 +33,10 @@ The discord bot runs a check every 30 minutes, where it will the ping the server
 
 Before installing, ensure you have Python 3.x installed on your system. Then, follow these steps to get your bot up and running, you can either run the bot locally or host it in the cloud (AWS, GCP):
 
+## file download
+
+close the github repo onto the machine you plan on running the bottom
+
 ### Linux Setup
 
 Run the provided `setup.sh` script:
