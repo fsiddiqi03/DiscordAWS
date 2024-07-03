@@ -35,7 +35,7 @@ Before installing, ensure you have Python 3.x installed on your system. Then, fo
 
 ## File download
 
-close the github repo onto the machine you plan on running the bottom
+Clone the github repo onto the machine you plan on running the bottom
 
 ### Linux Setup
 
