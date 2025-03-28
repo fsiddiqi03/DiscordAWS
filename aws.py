@@ -154,6 +154,17 @@ class EC2Manager:
                 print(response)
         except Exception as e:
             print(e)
+    
+
+    def send_command(self, command):
+        ip = self.get_ip()
+        try:
+            with MCRcon(ip, self.RCON_PASSWORD, self.port) as mcr:
+                response = mcr.command(command)
+                return response
+        except Exception as e:
+            print(e)
+            
         
 
 

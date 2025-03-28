@@ -21,7 +21,6 @@ async def on_ready():
         print(e)
 
 
-
 @bot.tree.command(name="start-cloud", description="starts the cloud server for the minecraft server")
 async def Start(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral = True)
@@ -67,7 +66,6 @@ async def Stop(interaction: discord.Interaction):
             await interaction.followup.send("Server has been closed")
     else:
         await interaction.followup.send("Server is already closed")
-  
 
 
 @bot.tree.command(name = "ip", description= "obtain server ip")
@@ -75,7 +73,7 @@ async def Ip(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral = True)
     if ec2.check_server():
         ip = ec2.get_ip()
-        await interaction.followup.send("server ip is: " + ip)
+        await interaction.followup.send("Server ip is: " + ip)
     else:
         await interaction.followup.send("Server is closed")
 
@@ -108,6 +106,19 @@ async def status(interaction: discord.Interaction):
         await interaction.followup.send(f"**Cloud Status:** {cloud_status}, **Minecraft Server Status:** {mc_status}")
     except Exception as e:
         print(e)
+
+@bot.tree.command(name="command", description= "send commands to the minecraft server")
+async def command(interaction: discord.Interaction, command:str):
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        result = ec2.send_command(command)
+        await interaction.followup.send(f"✅ Command sent to server:\n`{command}`\n\n📜 Response:\n```{result}```")
+    except Exception as e:
+        print(e)
+        await interaction.followup.send("Command failed to send, This is an issue with the server")
+
+    
 
 
 @tasks.loop(minutes=30)
