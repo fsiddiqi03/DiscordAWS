@@ -159,7 +159,7 @@ class EC2Manager:
     def send_command(self, command):
         ip = self.get_ip()
 
-        if "ban" in command or "op" in command or "deop" in command or "stop" in command or "whitelist" in command:
+        if "ban" in command or "op" in command or "deop" in command or "stop" in command or "whitelist" or "kick" or "kill" in command:
             return "Command not allowed for security reasons, if you need to run this command message the server admin"
         try:
             with MCRcon(ip, self.RCON_PASSWORD, self.port) as mcr:
