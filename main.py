@@ -120,7 +120,6 @@ async def command(interaction: discord.Interaction, command:str):
 
     
 
-
 @tasks.loop(minutes=30)
 async def auto_stop():
     player_count = ec2.get_player_count()
@@ -131,6 +130,7 @@ async def auto_stop():
             ec2.stop_ec2()
         elif player_count == -1:
             print("server offline")
+            ec2.stop_ec2()
         else:
             ec2.random_message()
             print(f"server online with {player_count} players!")
