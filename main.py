@@ -33,7 +33,7 @@ async def Start(interaction: discord.Interaction):
             else:
                 await interaction.followup.send("Cloud server failed please try again later or contact Faris")
         else:
-            await interaction.followup.send("cloud server already active, please use the /start_minecraft command")
+            await interaction.followup.send("Cloud server already active, please use the /start_minecraft command")
     except Exception as e:
         await interaction.followup.send(f"An error occurred: {e}. Please try again later.")
 
