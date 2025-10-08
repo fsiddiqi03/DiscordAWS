@@ -191,7 +191,8 @@ async def auto_stop():
                      )
                      await channel.send(embed=embed)
             elif player_count == -1:
-                print("server offline")
+                ec2.stop_ec2()
+                print("Server was on but minecraft server was off, turning everything off")
             else:
                 ec2.random_message()
                 print(f"server online with {player_count} players!")
