@@ -172,11 +172,20 @@ async def command(interaction: discord.Interaction, command:str):
         print(e)
         await interaction.followup.send("Command failed to send, This is an issue with the server")
 
+FIRST_CHECK = True
 
 @tasks.loop(minutes=30)
 async def auto_stop():
+    
+    global FIRST_CHECK
+    if FIRST_CHECK:
+        FIRST_CHECK = False
+        print("Skipping first auto_stop check")
+        return
+    
     player_count = ec2.get_player_count()
     print("checking server")
+    
     try:
         if ec2.check_ec2_status() == "running": 
             if player_count == 0:
