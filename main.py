@@ -172,6 +172,37 @@ async def command(interaction: discord.Interaction, command:str):
         print(e)
         await interaction.followup.send("Command failed to send, This is an issue with the server")
 
+
+@bot.tree.command(name="info", description="Get information about the Minecraft server")
+async def info(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    
+    embed = discord.Embed(
+        title="📋 Server Information",
+        description="Here's everything you need to know about our Minecraft server!",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="🎮 Minecraft Version", value="1.20.1", inline=True)
+    embed.add_field(name="📦 Modpack", value="Create Chronicles: Bosses and Beyond", inline=True)
+    embed.add_field(
+        name="🔗 Modpack Link", 
+        value="[Download on CurseForge](https://www.curseforge.com/minecraft/modpacks/create-chronicles-bosses-and-beyond)", 
+        inline=False
+    )
+    embed.add_field(
+        name="🚀 How to Start the Server",
+        value=(
+            "1️⃣ Use `/status` to check if servers are running\n"
+            "2️⃣ Use `/start-cloud` if the cloud server is offline\n"
+            "3️⃣ Use `/start-minecraft` to launch the Minecraft server\n\n"
+            "⏳ **Note:** Since this is a modded server, startup can take **2-5 minutes**. Be patient!"
+        ),
+        inline=False
+    )
+    embed.set_footer(text="Make sure to install the modpack before joining!")
+    
+    await interaction.followup.send(embed=embed)
+
 FIRST_CHECK = True
 
 @tasks.loop(minutes=30)
