@@ -95,9 +95,9 @@ class EC2Manager:
                 }
             )
             # use while to check the status of the minecraft server after sending the command 
-            # checks the server 15 times in a 75 second window 
+            # checks the server 60 times in a 5 minute window (modded servers take longer to start)
             attempts = 0
-            while attempts < 15:
+            while attempts < 60:
                 if self.check_server():
                     return True
                 time.sleep(5)
