@@ -1,4 +1,5 @@
 import discord
+import asyncio
 from discord import app_commands
 from discord.ext import tasks, commands
 from config import TOKEN, CHANNEL_ID
@@ -36,10 +37,10 @@ async def send_public_message(interaction: discord.Interaction, message: str, em
 async def Start(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral = True)
     try:
-        ec2_status = ec2.check_ec2_status()
+        ec2_status = await asyncio.to_thread(ec2.check_ec2_status)
         if ec2_status == "stopped":
             await interaction.followup.send("Starting the cloud server, please wait 3-4 minutes. I'll @ you when it's ready!")
-            if ec2.start_ec2():
+            if await asyncio.to_thread(ec2.start_ec2):
                 # Send public embed announcing cloud is ready
                 embed = discord.Embed(
                     title="☁️ Cloud Server Online!",
@@ -61,13 +62,16 @@ async def Start(interaction: discord.Interaction):
 async def Start_Minecraft(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral = True)
     try:
-        ec2_status = ec2.check_ec2_status()
-        minecraft_status = ec2.check_server()
-        ip = ec2.get_ip()
+        ec2_status = await asyncio.to_thread(ec2.check_ec2_status)
+        minecraft_status = await asyncio.to_thread(ec2.check_server)
+        ip = await asyncio.to_thread(ec2.get_ip)
         if ec2_status == "stopped":
             await interaction.followup.send("Please start the Cloud server first, using Start Cloud command")
         elif not minecraft_status:
-            if ec2.start_minecraft_server():
+            await interaction.followup.send("Starting Minecraft server, this may take 2-5 minutes for a modded server. I'll @ you when it's ready!")
+            if await asyncio.to_thread(ec2.start_minecraft_server):
+                # Get fresh IP after server starts
+                ip = await asyncio.to_thread(ec2.get_ip)
                 # Send public message with server info
                 embed = discord.Embed(
                     title="🎮 Minecraft Server Started!",
@@ -90,8 +94,8 @@ async def Start_Minecraft(interaction: discord.Interaction):
 async def Stop(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral = True)
     try:
-        if ec2.check_ec2_status() == "running": 
-            if ec2.stop_ec2():
+        if await asyncio.to_thread(ec2.check_ec2_status) == "running": 
+            if await asyncio.to_thread(ec2.stop_ec2):
                 # Send public message about shutdown
                 embed = discord.Embed(
                     title="🔴 Server Shutdown",
@@ -112,8 +116,8 @@ async def Stop(interaction: discord.Interaction):
 @bot.tree.command(name = "ip", description= "obtain server ip")
 async def Ip(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral = True)
-    if ec2.check_server():
-        ip = ec2.get_ip()
+    if await asyncio.to_thread(ec2.check_server):
+        ip = await asyncio.to_thread(ec2.get_ip)
         await interaction.followup.send("Server ip is: " + ip)
     else:
         await interaction.followup.send("Server is closed")
@@ -123,16 +127,17 @@ async def Ip(interaction: discord.Interaction):
 async def restart(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     try:
-        if ec2.check_server():
-            if ec2.stop_minecraft():
-                if ec2.start_minecraft_server():
+        if await asyncio.to_thread(ec2.check_server):
+            await interaction.followup.send("Restarting server, this may take a few minutes...")
+            if await asyncio.to_thread(ec2.stop_minecraft):
+                if await asyncio.to_thread(ec2.start_minecraft_server):
                     # Send public message about restart
                     embed = discord.Embed(
                         title="🔄 Server Restarted",
                         description=f"The Minecraft server has been restarted by {interaction.user.mention}",
                         color=discord.Color.orange()
                     )
-                    ip = ec2.get_ip()
+                    ip = await asyncio.to_thread(ec2.get_ip)
                     embed.add_field(name="Server IP", value=f"`{ip}`", inline=False)
                     embed.add_field(name="Status", value="✅ Online", inline=True)
                     await send_public_message(interaction, "", embed=embed)
@@ -151,9 +156,9 @@ async def restart(interaction: discord.Interaction):
 async def status(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     try:
-        cloud_status = ec2.check_ec2_status()
+        cloud_status = await asyncio.to_thread(ec2.check_ec2_status)
         mc_status = "off"
-        if ec2.check_server():
+        if await asyncio.to_thread(ec2.check_server):
             mc_status = "on"
         await interaction.followup.send(f"**Cloud Status:** {cloud_status}, **Minecraft Server Status:** {mc_status}")
     except Exception as e:
@@ -166,7 +171,7 @@ async def command(interaction: discord.Interaction, command:str):
     await interaction.response.defer(ephemeral=True)
     
     try:
-        result = ec2.send_command(command)
+        result = await asyncio.to_thread(ec2.send_command, command)
         await interaction.followup.send(f"✅ Command sent to server:\n`{command}`\n\n📜 Response:\n```{result}```")
     except Exception as e:
         print(e)
@@ -214,14 +219,14 @@ async def auto_stop():
         print("Skipping first auto_stop check")
         return
     
-    player_count = ec2.get_player_count()
+    player_count = await asyncio.to_thread(ec2.get_player_count)
     print("checking server")
     
     try:
-        if ec2.check_ec2_status() == "running": 
+        if await asyncio.to_thread(ec2.check_ec2_status) == "running": 
             if player_count == 0:
                 print("no active player, turning server off")
-                ec2.stop_ec2()
+                await asyncio.to_thread(ec2.stop_ec2)
                 channel = bot.get_channel(CHANNEL_ID)
                 if channel:
                      embed = discord.Embed(
@@ -233,7 +238,7 @@ async def auto_stop():
             elif player_count == -1:
                 print("Server was on but minecraft server was off, turning everything off")
             else:
-                ec2.random_message()
+                await asyncio.to_thread(ec2.random_message)
                 print(f"server online with {player_count} players!")
         else:
             print("server offline")
