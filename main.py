@@ -166,18 +166,6 @@ async def status(interaction: discord.Interaction):
         await interaction.followup.send(f"An error occurred: {e}. Please try again later.")
 
 
-@bot.tree.command(name="command", description= "send commands to the minecraft server")
-async def command(interaction: discord.Interaction, command:str):
-    await interaction.response.defer(ephemeral=True)
-    
-    try:
-        result = await asyncio.to_thread(ec2.send_command, command)
-        await interaction.followup.send(f"✅ Command sent to server:\n`{command}`\n\n📜 Response:\n```{result}```")
-    except Exception as e:
-        print(e)
-        await interaction.followup.send("Command failed to send, This is an issue with the server")
-
-
 @bot.tree.command(name="info", description="Get information about the Minecraft server")
 async def info(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
