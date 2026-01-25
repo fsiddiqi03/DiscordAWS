@@ -176,10 +176,10 @@ async def info(interaction: discord.Interaction):
         color=discord.Color.blue()
     )
     embed.add_field(name="🎮 Minecraft Version", value="1.20.1", inline=True)
-    embed.add_field(name="📦 Modpack", value="Create Chronicles: Bosses and Beyond", inline=True)
+    embed.add_field(name="📦 Modpack", value="Better MC", inline=True)
     embed.add_field(
         name="🔗 Modpack Link", 
-        value="[Download on CurseForge](https://www.curseforge.com/minecraft/modpacks/create-chronicles-bosses-and-beyond)", 
+        value="[Download on CurseForge](https://www.curseforge.com/minecraft/modpacks/better-mc-forge-bmc4)", 
         inline=False
     )
     embed.add_field(
