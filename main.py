@@ -157,10 +157,38 @@ async def status(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     try:
         cloud_status = await asyncio.to_thread(ec2.check_ec2_status)
-        mc_status = "off"
-        if await asyncio.to_thread(ec2.check_server):
-            mc_status = "on"
-        await interaction.followup.send(f"**Cloud Status:** {cloud_status}, **Minecraft Server Status:** {mc_status}")
+        mc_status = await asyncio.to_thread(ec2.check_server)
+        
+        # Determine colors and status text
+        if cloud_status == "running" and mc_status:
+            color = discord.Color.green()
+            cloud_display = "✅ Online"
+            mc_display = "✅ Online"
+        elif cloud_status == "running":
+            color = discord.Color.orange()
+            cloud_display = "✅ Online"
+            mc_display = "❌ Offline"
+        else:
+            color = discord.Color.red()
+            cloud_display = "❌ Offline"
+            mc_display = "❌ Offline"
+        
+        embed = discord.Embed(
+            title="📊 Server Status",
+            description="Current status of all servers",
+            color=color
+        )
+        embed.add_field(name="☁️ Cloud Server", value=cloud_display, inline=True)
+        embed.add_field(name="🎮 Minecraft Server", value=mc_display, inline=True)
+        
+        # Add IP if server is running
+        if mc_status:
+            ip = await asyncio.to_thread(ec2.get_ip)
+            embed.add_field(name="🌐 Server IP", value=f"`{ip}`", inline=False)
+        
+        embed.set_footer(text="Use /info for modpack details")
+        
+        await interaction.followup.send(embed=embed)
     except Exception as e:
         print(e)
         await interaction.followup.send(f"An error occurred: {e}. Please try again later.")
