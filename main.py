@@ -64,28 +64,25 @@ async def Start_Minecraft(interaction: discord.Interaction):
     try:
         ec2_status = await asyncio.to_thread(ec2.check_ec2_status)
         minecraft_status = await asyncio.to_thread(ec2.check_server)
-        ip = await asyncio.to_thread(ec2.get_ip)
         if ec2_status == "stopped":
             await interaction.followup.send("Please start the Cloud server first, using Start Cloud command")
         elif not minecraft_status:
             await interaction.followup.send("Starting Minecraft server, this may take 2-5 minutes for a modded server. I'll @ you when it's ready!")
             if await asyncio.to_thread(ec2.start_minecraft_server):
-                # Get fresh IP after server starts
-                ip = await asyncio.to_thread(ec2.get_ip)
                 # Send public message with server info
                 embed = discord.Embed(
                     title="🎮 Minecraft Server Started!",
                     description=f"Server has been started by {interaction.user.mention}",
                     color=discord.Color.green()
                 )
-                embed.add_field(name="Server IP", value=f"`{ip}`", inline=False)
+                embed.add_field(name="Server IP", value=f"`{IP}`", inline=False)
                 embed.add_field(name="Status", value="✅ Online", inline=True)
                 embed.set_footer(text="Happy mining!")
                 await send_public_message(interaction, "", embed=embed)
             else:
                 await interaction.followup.send("Minecraft Server failed try again later")
         else:
-            await interaction.followup.send("Minecraft Server already On with ip: " + ip)
+            await interaction.followup.send("Minecraft Server already On with ip: " + IP)
     except Exception as e:
         await interaction.followup.send(f"An error occurred: {e}. Please try again later.")
 
