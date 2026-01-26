@@ -2,7 +2,7 @@ import discord
 import asyncio
 from discord import app_commands
 from discord.ext import tasks, commands
-from config import TOKEN, CHANNEL_ID
+from config import TOKEN, CHANNEL_ID, IP
 from aws import EC2Manager
 
 
@@ -117,8 +117,7 @@ async def Stop(interaction: discord.Interaction):
 async def Ip(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral = True)
     if await asyncio.to_thread(ec2.check_server):
-        ip = await asyncio.to_thread(ec2.get_ip)
-        await interaction.followup.send("Server ip is: " + ip)
+        await interaction.followup.send("Server ip is: " + IP)
     else:
         await interaction.followup.send("Server is closed")
 
@@ -203,6 +202,7 @@ async def info(interaction: discord.Interaction):
         description="Here's everything you need to know about our Minecraft server!",
         color=discord.Color.blue()
     )
+    embed.add_field(name="🌐 Server IP", value=f"`{IP}`", inline=False)
     embed.add_field(name="🎮 Minecraft Version", value="1.20.1", inline=True)
     embed.add_field(name="📦 Modpack", value="Better MC", inline=True)
     embed.add_field(
