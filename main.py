@@ -179,8 +179,7 @@ async def status(interaction: discord.Interaction):
         
         # Add IP if server is running
         if mc_status:
-            ip = await asyncio.to_thread(ec2.get_ip)
-            embed.add_field(name="🌐 Server IP", value=f"`{ip}`", inline=False)
+            embed.add_field(name="🌐 Server IP", value=f"`{IP}`", inline=False)
         
         embed.set_footer(text="Use /info for modpack details")
         
