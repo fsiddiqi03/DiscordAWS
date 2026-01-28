@@ -201,10 +201,10 @@ async def info(interaction: discord.Interaction):
     )
     embed.add_field(name="🌐 Server IP", value=f"`{IP}`", inline=False)
     embed.add_field(name="🎮 Minecraft Version", value="1.20.1", inline=True)
-    embed.add_field(name="📦 Modpack", value="Better MC", inline=True)
+    embed.add_field(name="📦 Modpack", value="Prominence II: Hasturian Era", inline=True)
     embed.add_field(
         name="🔗 Modpack Link", 
-        value="[Download on CurseForge](https://www.curseforge.com/minecraft/modpacks/better-mc-forge-bmc4)", 
+        value="[Download on CurseForge](https://www.curseforge.com/minecraft/modpacks/prominence-2-hasturian-era)", 
         inline=False
     )
     embed.add_field(
