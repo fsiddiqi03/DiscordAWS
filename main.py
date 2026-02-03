@@ -249,6 +249,15 @@ async def auto_stop():
                      await channel.send(embed=embed)
             elif player_count == -1:
                 print("Server was on but minecraft server was off, turning everything off")
+                await asyncio.to_thread(ec2.stop_ec2)
+                channel = bot.get_channel(CHANNEL_ID)
+                if channel:
+                     embed = discord.Embed(
+                         title="⏰ Auto-Shutdown",
+                         description="Server automatically shut down (EC2 was running but Minecraft server was not active)",
+                         color=discord.Color.yellow()
+                     )
+                     await channel.send(embed=embed)
             else:
                 await asyncio.to_thread(ec2.random_message)
                 print(f"server online with {player_count} players!")
