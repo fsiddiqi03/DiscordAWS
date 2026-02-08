@@ -91,19 +91,22 @@ async def Start_Minecraft(interaction: discord.Interaction):
 async def Stop(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral = True)
     try:
-        if await asyncio.to_thread(ec2.check_ec2_status) == "running": 
-            if await asyncio.to_thread(ec2.stop_ec2):
-                # Send public message about shutdown
-                embed = discord.Embed(
-                    title="🔴 Server Shutdown",
-                    description=f"The Minecraft and cloud servers have been shut down by {interaction.user.mention}",
-                    color=discord.Color.red()
-                )
-                embed.add_field(name="Status", value="❌ Offline", inline=True)
-                embed.set_footer(text="Thank you for playing!")
-                await send_public_message(interaction, "", embed=embed)
+        if await asyncio.to_thread(ec2.check_ec2_status) == "running":
+            if await asyncio.to_thread(ec2.get_player_count) == 0:
+                if await asyncio.to_thread(ec2.stop_ec2):
+                    # Send public message about shutdown
+                    embed = discord.Embed(
+                        title="🔴 Server Shutdown",
+                        description=f"The Minecraft and cloud servers have been shut down by {interaction.user.mention}",
+                        color=discord.Color.red()
+                    )
+                    embed.add_field(name="Status", value="❌ Offline", inline=True)
+                    embed.set_footer(text="Thank you for playing!")
+                    await send_public_message(interaction, "", embed=embed)
+                else:
+                    await interaction.followup.send("Failed to stop the server")
             else:
-                await interaction.followup.send("Failed to stop the server")
+                await interaction.followup.send("Can't close server while people are on!")
         else:
             await interaction.followup.send("Server is already closed")
     except Exception as e:
