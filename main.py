@@ -1,13 +1,11 @@
 import discord
 import asyncio
-from discord import app_commands
 from discord.ext import tasks, commands
 from config import TOKEN, CHANNEL_ID, IP
 from aws import EC2Manager
 
-
-
 ec2 = EC2Manager()
+FIRST_CHECK = True
 
 bot = commands.Bot(command_prefix="!", intents = discord.Intents.all())
 
@@ -41,6 +39,8 @@ async def Start(interaction: discord.Interaction):
         if ec2_status == "stopped":
             await interaction.followup.send("Starting the cloud server, please wait 3-4 minutes. I'll @ you when it's ready!")
             if await asyncio.to_thread(ec2.start_ec2):
+                global FIRST_CHECK
+                FIRST_CHECK = True
                 # Send public embed announcing cloud is ready
                 embed = discord.Embed(
                     title="☁️ Cloud Server Online!",
@@ -223,62 +223,53 @@ async def info(interaction: discord.Interaction):
     
     await interaction.followup.send(embed=embed)
 
-FIRST_CHECK = True
 
 @tasks.loop(minutes=30)
 async def auto_stop():
-    
     global FIRST_CHECK
     if FIRST_CHECK:
         FIRST_CHECK = False
         print("Skipping first auto_stop check")
         return
-    
-    player_count = await asyncio.to_thread(ec2.get_player_count)
-    print("checking server")
-    
+
     try:
-        if await asyncio.to_thread(ec2.check_ec2_status) == "running": 
-            if player_count == 0:
-                print("no active player, turning server off")
-                await asyncio.to_thread(ec2.stop_ec2)
-                channel = bot.get_channel(CHANNEL_ID)
-                if channel:
-                     embed = discord.Embed(
-                         title="⏰ Auto-Shutdown",
-                         description="Server automatically shut down due to inactivity (0 players for 30 minutes)",
-                         color=discord.Color.yellow()
-                     )
-                     await channel.send(embed=embed)
-            elif player_count == -1:
-                print("Server was on but minecraft server was off, turning everything off")
-                await asyncio.to_thread(ec2.stop_ec2)
-                channel = bot.get_channel(CHANNEL_ID)
-                if channel:
-                     embed = discord.Embed(
-                         title="⏰ Auto-Shutdown",
-                         description="Server automatically shut down (EC2 was running but Minecraft server was not active)",
-                         color=discord.Color.yellow()
-                     )
-                     await channel.send(embed=embed)
-            else:
-                await asyncio.to_thread(ec2.random_message)
-                print(f"server online with {player_count} players!")
-        else:
+        if await asyncio.to_thread(ec2.check_ec2_status) != "running":
             print("server offline")
+            return
+
+        player_count = await asyncio.to_thread(ec2.get_player_count)
+        print("checking server")
+
+        if player_count > 0:
+            await asyncio.to_thread(ec2.random_message)
+            print(f"server online with {player_count} players!")
+            return
+
+        # Shut down if no players (0) or Minecraft server isn't running (-1)
+        if player_count == 0:
+            reason = "Server automatically shut down due to inactivity (0 players for 30 minutes)"
+            print("no active players, turning server off")
+        else:
+            reason = "Server automatically shut down (EC2 was running but Minecraft server was not active)"
+            print("EC2 was on but Minecraft server was off, turning everything off")
+
+        await asyncio.to_thread(ec2.stop_ec2)
+        channel = bot.get_channel(CHANNEL_ID)
+        if channel:
+            embed = discord.Embed(
+                title="⏰ Auto-Shutdown",
+                description=reason,
+                color=discord.Color.yellow()
+            )
+            await channel.send(embed=embed)
     except Exception as e:
         print(e)
-        
+
 
 @auto_stop.before_loop
 async def before_auto_stop():
     await bot.wait_until_ready()
-  
 
-
-  
 
 if __name__ == "__main__":
     bot.run(TOKEN)
-
-    
