@@ -90,7 +90,7 @@ class EC2Manager:
                 DocumentName="AWS-RunShellScript",
                 Parameters={
                     'commands': [
-                        'cd /opt/minecraft/modded && screen -dmS minecraft ./start.sh'
+                        'cd /opt/minecraft/modded && screen -dmS minecraft ./run.sh'
                     ]
                 }
             )
