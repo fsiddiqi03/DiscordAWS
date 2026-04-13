@@ -90,7 +90,7 @@ class EC2Manager:
                 DocumentName="AWS-RunShellScript",
                 Parameters={
                     'commands': [
-                        'cd /opt/minecraft/server && screen -dmS minecraft java -Xmx12288M -Xms12288M -jar minecraft_server.26.1.2.jar nogui'
+                        'cd /opt/minecraft/server && screen -dmS minecraft java -Xmx12288M -Xms12288M -jar server.jar nogui'
                     ]
                 }
             )
