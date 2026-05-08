@@ -55,18 +55,36 @@ class EC2Manager:
     
     # Ip changes every time the ec2 instance is launched 
     # this function will check whether the instance is running and then return the ip of the running ec2 instance 
+    # NOTE: After TCPShield setup, players connect via mc.mandeezy.com (not this IP).
+    # This is now mostly informational - kept for diagnostics or future use.
     def get_ip(self):
         if self.check_ec2_status() == "running":
             response = self.ec2.describe_instances(InstanceIds=[self.instance_id])
             instance = response['Reservations'][0]['Instances'][0]
             public_ip = instance.get("PublicIpAddress", None)
             return public_ip
+
+    # Returns the PRIVATE IP of the MC server EC2.
+    # Used for ALL internal bot-to-server communication (status pings, RCON).
+    # Traffic stays inside the VPC so it bypasses TCPShield's public-facing security
+    # group rules. Required because port 25565/25575 on the public IP is now restricted
+    # to TCPShield IPs and the bot's security group respectively.
+    def get_private_ip(self):
+        if self.check_ec2_status() == "running":
+            response = self.ec2.describe_instances(InstanceIds=[self.instance_id])
+            instance = response['Reservations'][0]['Instances'][0]
+            private_ip = instance.get("PrivateIpAddress", None)
+            return private_ip
+        return None
     
     # use the mcserver python library to ping the server
     # if the server gets pinged return true, if it fails return false 
+    # Uses PRIVATE IP - traffic stays in the VPC
     def check_server(self):
         if self.check_ec2_status() == "running":
-            ip = self.get_ip()
+            ip = self.get_private_ip()
+            if ip is None:
+                return False
             # obtain the server varaible as server using the ec2 instacne ip and mcserver
             server = JavaServer.lookup(ip)
             try:
@@ -109,10 +127,11 @@ class EC2Manager:
     
     # get player count of the server if its running, 
     # function returns the player count, the bot will use this to determine if the server should keep running or be turned off  
-    # return -1 if server is off. 
+    # return -1 if server is off OR unreachable.
+    # Uses PRIVATE IP - traffic stays in the VPC
     def get_player_count(self):
         if self.check_server():
-            ip = self.get_ip()
+            ip = self.get_private_ip()
             server = JavaServer.lookup(ip)
             player_count = server.status().players.online
             return player_count
@@ -124,8 +143,11 @@ class EC2Manager:
     # this stops the server without stoping the ec2 instance
     # used in the restart-server function in discord bot 
     # runs a 75 seconds timer to check when the server is turned off, returning true  
+    # Uses PRIVATE IP - RCON port is now only accessible from inside the VPC
     def stop_minecraft(self):
-        ip = self.get_ip()
+        ip = self.get_private_ip()
+        if ip is None:
+            return False
 
         command = "/stop"
         
@@ -143,8 +165,11 @@ class EC2Manager:
         
 
     # use RCON to remotely send a random fact using the random fact python library. 
+    # Uses PRIVATE IP - RCON port is now only accessible from inside the VPC
     def random_message(self):
-        ip = self.get_ip()
+        ip = self.get_private_ip()
+        if ip is None:
+            return
 
         fact = get_fact(False)
         command = f"/say {fact}"
@@ -153,5 +178,4 @@ class EC2Manager:
                 response = mcr.command(command)
                 print(response)
         except Exception as e:
-            print(e)
-            
+            print(e)            

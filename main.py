@@ -5,7 +5,13 @@ from config import TOKEN, CHANNEL_ID, IP
 from aws import EC2Manager
 
 ec2 = EC2Manager()
+
 FIRST_CHECK = True
+# Track consecutive failures to reach the Minecraft server.
+# Used to distinguish transient network issues from actual server crashes,
+# so we don't auto-shutdown when there are players online but a temporary blip.
+unreachable_count = 0
+UNREACHABLE_THRESHOLD = 2  # Shut down after 2 consecutive failures (~1 hour of unreachability)
 
 bot = commands.Bot(command_prefix="!", intents = discord.Intents.all())
 
@@ -226,7 +232,7 @@ async def info(interaction: discord.Interaction):
 
 @tasks.loop(minutes=30)
 async def auto_stop():
-    global FIRST_CHECK
+    global FIRST_CHECK, unreachable_count
     if FIRST_CHECK:
         FIRST_CHECK = False
         print("Skipping first auto_stop check")
@@ -235,33 +241,55 @@ async def auto_stop():
     try:
         if await asyncio.to_thread(ec2.check_ec2_status) != "running":
             print("server offline")
+            unreachable_count = 0  # reset counter when EC2 is off
             return
 
         player_count = await asyncio.to_thread(ec2.get_player_count)
         print("checking server")
 
         if player_count > 0:
+            unreachable_count = 0  # reset on successful reach
             await asyncio.to_thread(ec2.random_message)
             print(f"server online with {player_count} players!")
             return
 
-        # Shut down if no players (0) or Minecraft server isn't running (-1)
+        # Confirmed empty server - safe to shut down
         if player_count == 0:
+            unreachable_count = 0  # reset on successful reach
             reason = "Server automatically shut down due to inactivity (0 players for 30 minutes)"
             print("no active players, turning server off")
-        else:
-            reason = "Server automatically shut down (EC2 was running but Minecraft server was not active)"
-            print("EC2 was on but Minecraft server was off, turning everything off")
+            await asyncio.to_thread(ec2.stop_ec2)
+            channel = bot.get_channel(CHANNEL_ID)
+            if channel:
+                embed = discord.Embed(
+                    title="⏰ Auto-Shutdown",
+                    description=reason,
+                    color=discord.Color.yellow()
+                )
+                await channel.send(embed=embed)
+            return
 
-        await asyncio.to_thread(ec2.stop_ec2)
-        channel = bot.get_channel(CHANNEL_ID)
-        if channel:
-            embed = discord.Embed(
-                title="⏰ Auto-Shutdown",
-                description=reason,
-                color=discord.Color.yellow()
-            )
-            await channel.send(embed=embed)
+        # player_count == -1: can't reach Minecraft server
+        # This could be a transient issue (network blip, MC restart) OR an actual crash.
+        # Wait for multiple consecutive failures before shutting down to avoid killing
+        # active players due to transient issues.
+        unreachable_count += 1
+        print(f"⚠️ Cannot reach Minecraft server ({unreachable_count}/{UNREACHABLE_THRESHOLD} cycles)")
+
+        if unreachable_count >= UNREACHABLE_THRESHOLD:
+            unreachable_count = 0
+            reason = f"Server automatically shut down (Minecraft server unreachable for {UNREACHABLE_THRESHOLD} consecutive cycles - likely crashed)"
+            print(reason)
+            await asyncio.to_thread(ec2.stop_ec2)
+            channel = bot.get_channel(CHANNEL_ID)
+            if channel:
+                embed = discord.Embed(
+                    title="⏰ Auto-Shutdown",
+                    description=reason,
+                    color=discord.Color.yellow()
+                )
+                await channel.send(embed=embed)
+
     except Exception as e:
         print(e)
 
