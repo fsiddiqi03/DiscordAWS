@@ -3,7 +3,7 @@ import time
 import logging
 from botocore.exceptions import WaiterError
 from mcstatus import JavaServer
-from mcrcon import MCRcon 
+from rcon.source import Client
 from randfacts import get_fact
 from config import RCON_PASSWORD, instance_id, port
 
@@ -168,50 +168,48 @@ class EC2Manager:
     
 
     
-    # use RCON to remotely connect into the minecraft server terminal and run the command /stop
-    # this stops the server without stoping the ec2 instance
-    # used in the restart-server function in discord bot 
-    # runs a 75 seconds timer to check when the server is turned off, returning true  
-    # Uses PRIVATE IP - RCON port is now only accessible from inside the VPC
-    def stop_minecraft(self):
-        logger.info("stop_minecraft called")
+    def _send_rcon(self, command_parts):
+        """Send a single RCON command to the MC server using its private IP.
+        Returns the server's response string, or None if the command failed."""
         ip = self.get_private_ip()
         if ip is None:
-            logger.error("stop_minecraft -> False (private IP is None)")
+            logger.warning("RCON skipped (private IP is None)")
+            return None
+        try:
+            with Client(ip, self.port, passwd=self.RCON_PASSWORD) as client:
+                response = client.run(*command_parts)
+                logger.info("RCON sent: %s -> %s", command_parts, response)
+                return response
+        except Exception:
+            logger.exception("RCON command failed: %s", command_parts)
+            return None
+
+    # Use RCON to remotely send the /stop command to the Minecraft server.
+    # This stops the server without stopping the EC2 instance.
+    # Used in the /restart-server Discord command.
+    # Uses PRIVATE IP - RCON port is now only accessible from inside the VPC.
+    def stop_minecraft(self):
+        logger.info("stop_minecraft called")
+        response = self._send_rcon(("stop",))
+        if response is None:
+            logger.error("stop_minecraft failed - RCON command did not execute")
             return False
 
-        command = "/stop"
-        
-        logger.info("Sending RCON /stop command to %s:%d", ip, self.port)
-        with MCRcon(ip, self.RCON_PASSWORD, self.port) as mcr:
-            response = mcr.command(command)
-            logger.info("RCON /stop response: %s", response)
-        
         attempts = 0
         while attempts < 15:
             if not self.check_server():
-                logger.info("stop_minecraft -> True (server stopped after %d attempts)", attempts + 1)
+                logger.info("stop_minecraft confirmed server stopped after %d attempts", attempts + 1)
                 return True
             time.sleep(5)
             attempts += 1 
-        logger.error("stop_minecraft -> False (server still running after 15 attempts)")
-        return False 
+        logger.warning("stop_minecraft timed out waiting for server to stop")
+        return False
         
 
-    # use RCON to remotely send a random fact using the random fact python library. 
-    # Uses PRIVATE IP - RCON port is now only accessible from inside the VPC
+    # Use RCON to send a random fact to the Minecraft server chat.
+    # Called every 30 minutes by the auto_stop task when players are online.
+    # Uses PRIVATE IP - RCON port is now only accessible from inside the VPC.
     def random_message(self):
         logger.debug("random_message called")
-        ip = self.get_private_ip()
-        if ip is None:
-            logger.warning("random_message skipped (private IP is None)")
-            return
-
         fact = get_fact(False)
-        command = f"/say {fact}"
-        try:
-            with MCRcon(ip, self.RCON_PASSWORD, self.port) as mcr:
-                response = mcr.command(command)
-                logger.info("random_message sent: %s", fact)
-        except Exception as e:
-            logger.error("random_message failed: %s", e)
+        self._send_rcon(("say", fact))

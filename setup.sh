@@ -13,7 +13,7 @@ pip3 install discord.py
 # Install additional Python libraries 
 pip3 install boto3
 pip3 install mcstatus
-pip3 install mcrcon
+pip3 install rcon
 pip3 install randfacts
 
 # Install AWS CLI
