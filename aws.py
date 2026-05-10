@@ -1,11 +1,13 @@
 import boto3
 import time
+import logging
 from botocore.exceptions import WaiterError
 from mcstatus import JavaServer
 from mcrcon import MCRcon 
 from randfacts import get_fact
 from config import RCON_PASSWORD, instance_id, port
 
+logger = logging.getLogger("aws")
 
 
 class EC2Manager:
@@ -15,42 +17,54 @@ class EC2Manager:
         self.ssm = boto3.client("ssm", region_name=region) # used to send command to the ec2 instance 
         self.RCON_PASSWORD = RCON_PASSWORD # used to send commands to minecraft server terminal 
         self.port = port # port used for sending command remotely to minecraft server terminal
+        logger.info("EC2Manager initialized (region=%s, instance=%s)", region, self.instance_id)
 
     # checks the status of the ec2 instance 
     def check_ec2_status(self):
+        logger.debug("check_ec2_status called")
         response = self.ec2.describe_instances(InstanceIds=[self.instance_id])
         state = response['Reservations'][0]['Instances'][0]['State']['Name']
-        # will return either stopped, running, pending, or stopping
+        logger.info("check_ec2_status -> %s", state)
         return state
     
     def start_ec2(self):
+        logger.info("start_ec2 called")
         status = self.check_ec2_status()
         # run the start ec2 only if the ec2 instance is turned off 
         if status == "stopped":       
             try:
+                logger.info("EC2 is stopped, sending start_instances request")
                 self.ec2.start_instances(InstanceIds=[self.instance_id])
                 # use waiter to check when the 2 initialized checks are completed 
                 # instantce status must be okay for the minecraft server to be launched 
                 waiter = self.ec2.get_waiter('instance_status_ok')
+                logger.info("Waiting for instance_status_ok...")
                 waiter.wait(InstanceIds=[self.instance_id])
+                logger.info("start_ec2 -> True (instance now running)")
                 return True
-            except WaiterError:
+            except WaiterError as e:
+                logger.error("start_ec2 -> False (WaiterError: %s)", e)
                 return False
         else:
+            logger.info("start_ec2 -> True (already in state: %s)", status)
             return True
         
     def stop_ec2(self):
-        # stops ec2 instance 
+        logger.info("stop_ec2 called")
         status = self.check_ec2_status()
         if status == "running":
             try:
+                logger.info("EC2 is running, sending stop_instances request")
                 self.ec2.stop_instances(InstanceIds=[self.instance_id])
-                # use wait to check when the instance is stopped then return True 
                 waiter = self.ec2.get_waiter("instance_stopped")
+                logger.info("Waiting for instance_stopped...")
                 waiter.wait(InstanceIds=[self.instance_id])
+                logger.info("stop_ec2 -> True (instance now stopped)")
                 return True
-            except WaiterError:
+            except WaiterError as e:
+                logger.error("stop_ec2 -> False (WaiterError: %s)", e)
                 return False
+        logger.info("stop_ec2 -> True (already in state: %s)", status)
         return True
     
     # Ip changes every time the ec2 instance is launched 
@@ -58,11 +72,14 @@ class EC2Manager:
     # NOTE: After TCPShield setup, players connect via mc.mandeezy.com (not this IP).
     # This is now mostly informational - kept for diagnostics or future use.
     def get_ip(self):
+        logger.debug("get_ip called")
         if self.check_ec2_status() == "running":
             response = self.ec2.describe_instances(InstanceIds=[self.instance_id])
             instance = response['Reservations'][0]['Instances'][0]
             public_ip = instance.get("PublicIpAddress", None)
+            logger.info("get_ip -> %s", public_ip)
             return public_ip
+        logger.warning("get_ip -> None (EC2 not running)")
 
     # Returns the PRIVATE IP of the MC server EC2.
     # Used for ALL internal bot-to-server communication (status pings, RCON).
@@ -70,29 +87,37 @@ class EC2Manager:
     # group rules. Required because port 25565/25575 on the public IP is now restricted
     # to TCPShield IPs and the bot's security group respectively.
     def get_private_ip(self):
+        logger.debug("get_private_ip called")
         if self.check_ec2_status() == "running":
             response = self.ec2.describe_instances(InstanceIds=[self.instance_id])
             instance = response['Reservations'][0]['Instances'][0]
             private_ip = instance.get("PrivateIpAddress", None)
+            logger.info("get_private_ip -> %s", private_ip)
             return private_ip
+        logger.warning("get_private_ip -> None (EC2 not running)")
         return None
     
     # use the mcserver python library to ping the server
     # if the server gets pinged return true, if it fails return false 
     # Uses PRIVATE IP - traffic stays in the VPC
     def check_server(self):
+        logger.debug("check_server called")
         if self.check_ec2_status() == "running":
             ip = self.get_private_ip()
             if ip is None:
+                logger.warning("check_server -> False (private IP is None)")
                 return False
             # obtain the server varaible as server using the ec2 instacne ip and mcserver
             server = JavaServer.lookup(ip)
             try:
                 latency = server.status().latency
+                logger.info("check_server -> True (latency=%.1fms)", latency)
                 return True 
-            except:
+            except Exception as e:
+                logger.warning("check_server -> False (ping failed: %s)", e)
                 return False
         else:
+            logger.info("check_server -> False (EC2 not running)")
             return False
         
     # use this function in the discord bot to start the server
@@ -100,9 +125,9 @@ class EC2Manager:
     # need to cd into the server folder and launch the server, 
     # include screen -dmS to keep the server open, without screen the server will crash after one hour. 
     def start_minecraft_server(self):
-        # attempt to start the minecraft server by sending it the start command
-        # use try to catch any errors 
+        logger.info("start_minecraft_server called")
         try:
+            logger.info("Sending SSM start command to instance")
             self.ssm.send_command(
                 InstanceIds=[self.instance_id],
                 DocumentName="AWS-RunShellScript",
@@ -112,17 +137,18 @@ class EC2Manager:
                     ]
                 }
             )
-            # use while to check the status of the minecraft server after sending the command 
             # checks the server 60 times in a 5 minute window (modded servers take longer to start)
             attempts = 0
             while attempts < 60:
                 if self.check_server():
+                    logger.info("start_minecraft_server -> True (server responding after %d attempts)", attempts + 1)
                     return True
                 time.sleep(5)
                 attempts += 1 
+            logger.error("start_minecraft_server -> False (server never responded after 60 attempts)")
             return False  
         except Exception as e:
-            print(e)
+            logger.error("start_minecraft_server -> False (exception: %s)", e)
             return False
     
     # get player count of the server if its running, 
@@ -130,11 +156,14 @@ class EC2Manager:
     # return -1 if server is off OR unreachable.
     # Uses PRIVATE IP - traffic stays in the VPC
     def get_player_count(self):
+        logger.debug("get_player_count called")
         if self.check_server():
             ip = self.get_private_ip()
             server = JavaServer.lookup(ip)
             player_count = server.status().players.online
+            logger.info("get_player_count -> %d", player_count)
             return player_count
+        logger.warning("get_player_count -> -1 (server not reachable)")
         return -1
     
 
@@ -145,30 +174,37 @@ class EC2Manager:
     # runs a 75 seconds timer to check when the server is turned off, returning true  
     # Uses PRIVATE IP - RCON port is now only accessible from inside the VPC
     def stop_minecraft(self):
+        logger.info("stop_minecraft called")
         ip = self.get_private_ip()
         if ip is None:
+            logger.error("stop_minecraft -> False (private IP is None)")
             return False
 
         command = "/stop"
         
+        logger.info("Sending RCON /stop command to %s:%d", ip, self.port)
         with MCRcon(ip, self.RCON_PASSWORD, self.port) as mcr:
             response = mcr.command(command)
-            print(response)
+            logger.info("RCON /stop response: %s", response)
         
         attempts = 0
         while attempts < 15:
             if not self.check_server():
+                logger.info("stop_minecraft -> True (server stopped after %d attempts)", attempts + 1)
                 return True
             time.sleep(5)
             attempts += 1 
+        logger.error("stop_minecraft -> False (server still running after 15 attempts)")
         return False 
         
 
     # use RCON to remotely send a random fact using the random fact python library. 
     # Uses PRIVATE IP - RCON port is now only accessible from inside the VPC
     def random_message(self):
+        logger.debug("random_message called")
         ip = self.get_private_ip()
         if ip is None:
+            logger.warning("random_message skipped (private IP is None)")
             return
 
         fact = get_fact(False)
@@ -176,6 +212,6 @@ class EC2Manager:
         try:
             with MCRcon(ip, self.RCON_PASSWORD, self.port) as mcr:
                 response = mcr.command(command)
-                print(response)
+                logger.info("random_message sent: %s", fact)
         except Exception as e:
-            print(e)            
+            logger.error("random_message failed: %s", e)
