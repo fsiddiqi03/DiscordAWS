@@ -5,7 +5,8 @@ import discord
 from discord.ext import tasks, commands
 
 from config import CHANNEL_ID, IP
-from aws import EC2Manager
+from ec2 import EC2Manager
+from minecraft import MinecraftServer
 import embeds
 
 logger = logging.getLogger("bot")
@@ -17,6 +18,7 @@ class ServerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.ec2 = EC2Manager()
+        self.mc = MinecraftServer(self.ec2)
         self.first_check = True
         # Track consecutive failures to reach the Minecraft server.
         # Used to distinguish transient network issues from actual server crashes,
@@ -42,10 +44,10 @@ class ServerCog(commands.Cog):
         logger.info("/start-cloud invoked by %s", interaction.user)
         await interaction.response.defer(ephemeral=True)
         try:
-            ec2_status = await asyncio.to_thread(self.ec2.check_ec2_status)
+            ec2_status = await asyncio.to_thread(self.ec2.check_status)
             if ec2_status == "stopped":
                 await interaction.followup.send("Starting the cloud server, please wait 3-4 minutes. I'll @ you when it's ready!")
-                if await asyncio.to_thread(self.ec2.start_ec2):
+                if await asyncio.to_thread(self.ec2.start):
                     self.first_check = True
                     logger.info("/start-cloud: EC2 started successfully")
                     await self.send_public_message(interaction, embeds.cloud_online(interaction.user.mention))
@@ -64,14 +66,14 @@ class ServerCog(commands.Cog):
         logger.info("/start-minecraft invoked by %s", interaction.user)
         await interaction.response.defer(ephemeral=True)
         try:
-            ec2_status = await asyncio.to_thread(self.ec2.check_ec2_status)
-            minecraft_status = await asyncio.to_thread(self.ec2.check_server)
+            ec2_status = await asyncio.to_thread(self.ec2.check_status)
+            minecraft_status = await asyncio.to_thread(self.mc.is_running)
             if ec2_status == "stopped":
                 logger.info("/start-minecraft: EC2 is stopped, cannot start MC")
                 await interaction.followup.send("Please start the Cloud server first, using Start Cloud command")
             elif not minecraft_status:
                 await interaction.followup.send("Starting Minecraft server, this may take 2-5 minutes for a modded server. I'll @ you when it's ready!")
-                if await asyncio.to_thread(self.ec2.start_minecraft_server):
+                if await asyncio.to_thread(self.mc.start):
                     logger.info("/start-minecraft: MC server started successfully")
                     await self.send_public_message(interaction, embeds.minecraft_started(interaction.user.mention, IP))
                 else:
@@ -89,11 +91,11 @@ class ServerCog(commands.Cog):
         logger.info("/shut-down invoked by %s", interaction.user)
         await interaction.response.defer(ephemeral=True)
         try:
-            if await asyncio.to_thread(self.ec2.check_ec2_status) == "running":
-                player_count = await asyncio.to_thread(self.ec2.get_player_count)
+            if await asyncio.to_thread(self.ec2.check_status) == "running":
+                player_count = await asyncio.to_thread(self.mc.player_count)
                 if player_count < 1:
                     logger.info("/shut-down: no players (%d), stopping EC2", player_count)
-                    if await asyncio.to_thread(self.ec2.stop_ec2):
+                    if await asyncio.to_thread(self.ec2.stop):
                         logger.info("/shut-down: EC2 stopped successfully")
                         await self.send_public_message(interaction, embeds.shutdown(interaction.user.mention))
                     else:
@@ -113,7 +115,7 @@ class ServerCog(commands.Cog):
     async def ip(self, interaction: discord.Interaction):
         logger.info("/ip invoked by %s", interaction.user)
         await interaction.response.defer(ephemeral=True)
-        if await asyncio.to_thread(self.ec2.check_server):
+        if await asyncio.to_thread(self.mc.is_running):
             logger.info("/ip: server online, returning IP")
             await interaction.followup.send("Server ip is: " + IP)
         else:
@@ -125,13 +127,13 @@ class ServerCog(commands.Cog):
         logger.info("/restart-server invoked by %s", interaction.user)
         await interaction.response.defer(ephemeral=True)
         try:
-            if await asyncio.to_thread(self.ec2.check_server):
+            if await asyncio.to_thread(self.mc.is_running):
                 await interaction.followup.send("Restarting server, this may take a few minutes...")
-                if await asyncio.to_thread(self.ec2.stop_minecraft):
+                if await asyncio.to_thread(self.mc.stop):
                     logger.info("/restart-server: MC stopped, starting again")
-                    if await asyncio.to_thread(self.ec2.start_minecraft_server):
+                    if await asyncio.to_thread(self.mc.start):
                         logger.info("/restart-server: MC restarted successfully")
-                        ip = await asyncio.to_thread(self.ec2.get_ip)
+                        ip = await asyncio.to_thread(self.ec2.public_ip)
                         await self.send_public_message(interaction, embeds.restart(interaction.user.mention, ip))
                     else:
                         logger.error("/restart-server: MC start failed after stop")
@@ -151,8 +153,8 @@ class ServerCog(commands.Cog):
         logger.info("/status invoked by %s", interaction.user)
         await interaction.response.defer(ephemeral=True)
         try:
-            cloud_status = await asyncio.to_thread(self.ec2.check_ec2_status)
-            mc_status = await asyncio.to_thread(self.ec2.check_server)
+            cloud_status = await asyncio.to_thread(self.ec2.check_status)
+            mc_status = await asyncio.to_thread(self.mc.is_running)
             logger.info("/status: cloud=%s, minecraft=%s", cloud_status, mc_status)
             await interaction.followup.send(embed=embeds.status(cloud_status, mc_status, IP))
         except Exception as e:
@@ -176,18 +178,18 @@ class ServerCog(commands.Cog):
             return
 
         try:
-            ec2_status = await asyncio.to_thread(self.ec2.check_ec2_status)
+            ec2_status = await asyncio.to_thread(self.ec2.check_status)
             if ec2_status != "running":
                 logger.info("auto_stop: EC2 offline (%s), nothing to do", ec2_status)
                 self.unreachable_count = 0
                 return
 
-            player_count = await asyncio.to_thread(self.ec2.get_player_count)
+            player_count = await asyncio.to_thread(self.mc.player_count)
             logger.info("auto_stop: player_count=%d, unreachable_count=%d", player_count, self.unreachable_count)
 
             if player_count > 0:
                 self.unreachable_count = 0
-                await asyncio.to_thread(self.ec2.random_message)
+                await asyncio.to_thread(self.mc.random_message)
                 logger.info("auto_stop: %d players online, sent random message", player_count)
                 return
 
@@ -195,7 +197,7 @@ class ServerCog(commands.Cog):
                 self.unreachable_count = 0
                 reason = "Server automatically shut down due to inactivity (0 players for 30 minutes)"
                 logger.info("auto_stop: 0 players, shutting down EC2")
-                await asyncio.to_thread(self.ec2.stop_ec2)
+                await asyncio.to_thread(self.ec2.stop)
                 channel = self.bot.get_channel(CHANNEL_ID)
                 if channel:
                     await channel.send(embed=embeds.auto_shutdown(reason))
@@ -209,7 +211,7 @@ class ServerCog(commands.Cog):
                 self.unreachable_count = 0
                 reason = f"Server automatically shut down (Minecraft server unreachable for {UNREACHABLE_THRESHOLD} consecutive cycles - likely crashed)"
                 logger.warning("auto_stop: threshold reached, shutting down EC2 — %s", reason)
-                await asyncio.to_thread(self.ec2.stop_ec2)
+                await asyncio.to_thread(self.ec2.stop)
                 channel = self.bot.get_channel(CHANNEL_ID)
                 if channel:
                     await channel.send(embed=embeds.auto_shutdown(reason))
