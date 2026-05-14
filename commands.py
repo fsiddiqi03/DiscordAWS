@@ -39,51 +39,40 @@ class ServerCog(commands.Cog):
 
     # ── Slash Commands ──────────────────────────────────────────────
 
-    @discord.app_commands.command(name="start-cloud", description="starts the cloud server for the minecraft server")
-    async def start_cloud(self, interaction: discord.Interaction):
-        logger.info("/start-cloud invoked by %s", interaction.user)
+    @discord.app_commands.command(name="start", description="Start the cloud and Minecraft server (5-9 min total)")
+    async def start(self, interaction: discord.Interaction):
+        logger.info("/start invoked by %s", interaction.user)
         await interaction.response.defer(ephemeral=True)
         try:
             ec2_status = await asyncio.to_thread(self.ec2.check_status)
-            if ec2_status == "stopped":
-                await interaction.followup.send("Starting the cloud server, please wait 3-4 minutes. I'll @ you when it's ready!")
-                if await asyncio.to_thread(self.ec2.start):
-                    self.first_check = True
-                    logger.info("/start-cloud: EC2 started successfully")
-                    await self.send_public_message(interaction, embeds.cloud_online(interaction.user.mention))
-                else:
-                    logger.error("/start-cloud: EC2 failed to start")
-                    await interaction.followup.send("Cloud server failed please try again later or contact Faris")
-            else:
-                logger.info("/start-cloud: EC2 already in state '%s'", ec2_status)
-                await interaction.followup.send("Cloud server already active, please use the /start-minecraft command")
+            mc_status = await asyncio.to_thread(self.mc.is_running)
+            if ec2_status == "running" and mc_status:
+                logger.info("/start: everything already running")
+                await interaction.followup.send(f"Server is already up! IP: `{IP}`")
+                return
+            if ec2_status in ("pending", "stopping"):
+                logger.info("/start: EC2 currently '%s', wait and retry", ec2_status)
+                await interaction.followup.send(f"Server is currently {ec2_status}. Please wait a minute and try again.")
+                return
+            await interaction.followup.send(
+                "Starting everything up — this may take 4-5 minutes. I'll @ you when it's ready!"
+            )
+            # Start the EC2. systemd auto-launches Minecraft on EC2 boot.
+            if not await asyncio.to_thread(self.ec2.start):
+                logger.error("/start: EC2 failed to start")
+                await interaction.followup.send("Cloud server failed to start. Please try again or contact Faris.")
+                return
+            self.first_check = True
+            logger.info("/start: EC2 ready, waiting for MC to come online")
+            # Poll until MC responds
+            if not await asyncio.to_thread(self.mc.poll_server_status):
+                logger.error("/start: MC never came up after 5 minutes")
+                await interaction.followup.send("Cloud is up but Minecraft didn't respond. Contact Faris.")
+                return
+            logger.info("/start: MC ready")
+            await self.send_public_message(interaction, embeds.server_ready(interaction.user.mention, IP))
         except Exception as e:
-            logger.error("/start-cloud error: %s", e, exc_info=True)
-            await interaction.followup.send(f"An error occurred: {e}. Please try again later.")
-
-    @discord.app_commands.command(name="start-minecraft", description="starts the minecraft server")
-    async def start_minecraft(self, interaction: discord.Interaction):
-        logger.info("/start-minecraft invoked by %s", interaction.user)
-        await interaction.response.defer(ephemeral=True)
-        try:
-            ec2_status = await asyncio.to_thread(self.ec2.check_status)
-            minecraft_status = await asyncio.to_thread(self.mc.is_running)
-            if ec2_status == "stopped":
-                logger.info("/start-minecraft: EC2 is stopped, cannot start MC")
-                await interaction.followup.send("Please start the Cloud server first, using Start Cloud command")
-            elif not minecraft_status:
-                await interaction.followup.send("Starting Minecraft server, this may take 2-5 minutes for a modded server. I'll @ you when it's ready!")
-                if await asyncio.to_thread(self.mc.start):
-                    logger.info("/start-minecraft: MC server started successfully")
-                    await self.send_public_message(interaction, embeds.minecraft_started(interaction.user.mention, IP))
-                else:
-                    logger.error("/start-minecraft: MC server failed to start")
-                    await interaction.followup.send("Minecraft Server failed try again later")
-            else:
-                logger.info("/start-minecraft: MC server already running")
-                await interaction.followup.send("Minecraft Server already On with ip: " + IP)
-        except Exception as e:
-            logger.error("/start-minecraft error: %s", e, exc_info=True)
+            logger.error("/start error: %s", e, exc_info=True)
             await interaction.followup.send(f"An error occurred: {e}. Please try again later.")
 
     @discord.app_commands.command(name="shut-down", description="closes the cloud server and minecraft server")
@@ -91,26 +80,63 @@ class ServerCog(commands.Cog):
         logger.info("/shut-down invoked by %s", interaction.user)
         await interaction.response.defer(ephemeral=True)
         try:
-            if await asyncio.to_thread(self.ec2.check_status) == "running":
-                player_count = await asyncio.to_thread(self.mc.player_count)
-                if player_count < 1:
-                    logger.info("/shut-down: no players (%d), stopping EC2", player_count)
-                    if await asyncio.to_thread(self.ec2.stop):
-                        logger.info("/shut-down: EC2 stopped successfully")
-                        await self.send_public_message(interaction, embeds.shutdown(interaction.user.mention))
-                    else:
-                        logger.error("/shut-down: EC2 stop failed")
-                        await interaction.followup.send("Failed to stop the server")
-                else:
-                    logger.info("/shut-down: blocked, %d players still online", player_count)
-                    await interaction.followup.send("Can't close server while people are on!")
-            else:
+            # Case if EC2 is offline 
+            ec2_status = await asyncio.to_thread(self.ec2.check_status)
+            if ec2_status != "running":
                 logger.info("/shut-down: EC2 already stopped")
                 await interaction.followup.send("Server is already closed")
+                return
+            # Case if players are online
+            player_count = await asyncio.to_thread(self.mc.player_count)
+            if player_count > 0:
+                logger.info("/shut-down: blocked, %d players still online", player_count)
+                await interaction.followup.send("Can't close server while people are on!")
+                return
+            await interaction.followup.send("Closing server, this may take a few minutes...")
+            # Attempt to close EC2
+            if not await asyncio.to_thread(self.ec2.stop):
+                logger.error("/shut-down: EC2 stop failed")
+                await interaction.followup.send("Failed to stop the server, please try again later")
+                return
+            logger.info("/shut-down: EC2 stopped successfully")
+            await self.send_public_message(interaction, embeds.shutdown(interaction.user.mention))
         except Exception as e:
             logger.error("/shut-down error: %s", e, exc_info=True)
             await interaction.followup.send(f"An error occurred: {e}. Please try again later.")
 
+    @discord.app_commands.command(name="restart-server", description="restarts the minecraft server")
+    async def restart_server(self, interaction: discord.Interaction):
+        logger.info("/restart-server invoked by %s", interaction.user)
+        await interaction.response.defer(ephemeral=True)
+        try:
+            ec2_status = await asyncio.to_thread(self.ec2.check_status)
+            if ec2_status != "running":
+                logger.info("/restart-server: ec2 is turned off")
+                await interaction.followup.send(f"Can't restart server when cloud is off, run /start ")
+                return
+            player_count = await asyncio.to_thread(self.mc.player_count)
+            if player_count > 0:
+                logger.info("/restart-server: blocked, %d players still online", player_count)
+                await interaction.followup.send("Can't restart server while people are on!")
+                return
+            await interaction.followup.send("Restarting server, this may take a few minutes...")
+            # If MC is reachable, gracefully stop for a clean save first.
+            # If it's already crashed/unreachable, skip straight to systemctl start.
+            if await asyncio.to_thread(self.mc.is_running):
+                logger.info("/restart-server: minecraft server on, closing server")
+                await asyncio.to_thread(self.mc.stop)   
+            # Bring MC back up via systemd
+            logger.info("/restart-server: starting MC via systemctl")
+            if not await asyncio.to_thread(self.mc.start):
+                logger.error("/restart-server: MC never came back after 5 minutes")
+                await interaction.followup.send("Restart failed — MC didn't come back. Contact Faris.")
+                return
+            logger.info("/restart-server: MC restarted successfully")
+            await self.send_public_message(interaction, embeds.restart(interaction.user.mention, IP))
+        except Exception as e:
+            logger.error("/restart-server error: %s", e, exc_info=True)
+            await interaction.followup.send(f"An error occurred: {e}. Please try again later.")
+    
     @discord.app_commands.command(name="ip", description="obtain server ip")
     async def ip(self, interaction: discord.Interaction):
         logger.info("/ip invoked by %s", interaction.user)
@@ -121,32 +147,6 @@ class ServerCog(commands.Cog):
         else:
             logger.info("/ip: server offline")
             await interaction.followup.send("Server is closed")
-
-    @discord.app_commands.command(name="restart-server", description="restarts the minecraft server")
-    async def restart_server(self, interaction: discord.Interaction):
-        logger.info("/restart-server invoked by %s", interaction.user)
-        await interaction.response.defer(ephemeral=True)
-        try:
-            if await asyncio.to_thread(self.mc.is_running):
-                await interaction.followup.send("Restarting server, this may take a few minutes...")
-                if await asyncio.to_thread(self.mc.stop):
-                    logger.info("/restart-server: MC stopped, starting again")
-                    if await asyncio.to_thread(self.mc.start):
-                        logger.info("/restart-server: MC restarted successfully")
-                        ip = await asyncio.to_thread(self.ec2.public_ip)
-                        await self.send_public_message(interaction, embeds.restart(interaction.user.mention, ip))
-                    else:
-                        logger.error("/restart-server: MC start failed after stop")
-                        await interaction.followup.send("server start failed")
-                else:
-                    logger.error("/restart-server: MC stop failed")
-                    await interaction.followup.send("server stop failed, try again")
-            else:
-                logger.info("/restart-server: server not running")
-                await interaction.followup.send("server not on")
-        except Exception as e:
-            logger.error("/restart-server error: %s", e, exc_info=True)
-            await interaction.followup.send(f"An error occurred: {e}. Please try again later.")
 
     @discord.app_commands.command(name="status", description="obtain the status of the cloud and minecraft server")
     async def status(self, interaction: discord.Interaction):
