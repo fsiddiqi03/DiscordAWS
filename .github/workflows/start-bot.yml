@@ -1,0 +1,22 @@
+name: Start Discord Bot
+
+# Run manually from the GitHub Actions tab (Run workflow button).
+on:
+  workflow_dispatch:
+
+jobs:
+  start-bot:
+    name: Start bot on EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Start bot over SSH
+        env:
+          PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          HOSTNAME: ${{ secrets.SSH_HOST }}
+          USER_NAME: ${{ secrets.USER_NAME }}
+        run: |
+          echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} '
+            cd /home/ubuntu/DiscordAWS
+            ./start.sh'

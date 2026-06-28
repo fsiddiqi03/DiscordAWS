@@ -54,39 +54,35 @@ class MinecraftServer:
         return count
 
     def start(self) -> bool:
-        """Launch the MC server via SSM, then poll until it's responding."""
+        """Launch the MC server via systemctl, then poll until it's responding."""
         logger.info("start called")
-        # Need to cd into the server folder and launch with `screen -dmS` so the
-        # process stays alive after the SSM session ends.
-        sent = self.ec2.send_ssm_command([
-            "cd /opt/minecraft/server && screen -dmS minecraft java -Xmx12288M -Xms12288M -jar server.jar nogui"
-        ])
+        
+
+        sent = self.ec2.send_ssm_command(["systemctl start minecraft"])
         if not sent:
             logger.error("start -> False (SSM command failed)")
             return False
 
-        # Modded servers can take a while; allow up to 5 minutes
-        attempts = self._wait_for(self.is_running, attempts=60, interval=5)
-        if attempts is None:
-            logger.error("start -> False (server never responded after 60 attempts)")
-            return False
-        logger.info("start -> True (server responding after %d attempts)", attempts)
-        return True
+        return self.poll_server_status()
 
     def stop(self) -> bool:
-        """Send /stop via RCON and wait for the server to go offline."""
+        """Stop the MC server via systemctl."""
+        
         logger.info("stop called")
-        response = self._send_rcon(("stop",))
-        if response is None:
-            logger.error("stop failed - RCON command did not execute")
+
+        sent = self.ec2.send_ssm_command(["systemctl stop minecraft"])
+        if not sent:
+            logger.error("stop -> False (SSM command failed)")
             return False
 
-        attempts = self._wait_for(lambda: not self.is_running(), attempts=15, interval=5)
+        # Allow up to 150s — systemd's TimeoutStopSec is 120s + buffer for SSM/polling delay
+        attempts = self._wait_for(lambda: not self.is_running(), attempts=30, interval=5)
         if attempts is None:
             logger.warning("stop timed out waiting for server to stop")
             return False
         logger.info("stop confirmed server stopped after %d attempts", attempts)
         return True
+
 
     def random_message(self) -> None:
         """Send a random fact to the MC server chat via RCON."""
@@ -108,6 +104,10 @@ class MinecraftServer:
         except Exception:
             logger.exception("RCON command failed: %s", command_parts)
             return None
+    
+    def poll_server_status(self) -> bool:
+        """Wait up to 5 minutes for the MC server to respond. Modded servers can take a while."""
+        return self._wait_for(self.is_running, attempts=60, interval=5) is not None
 
     @staticmethod
     def _wait_for(predicate: Callable[[], bool], attempts: int, interval: int) -> int | None:
