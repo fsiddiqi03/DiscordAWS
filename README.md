@@ -49,7 +49,7 @@ A Discord bot that allows users to manage a modded Minecraft server hosted on AW
 **Two EC2 instances** live inside the same AWS VPC:
 
 - **Bot EC2** — Always-on, lightweight instance that runs the Discord bot in a `screen` session. Manages the Server EC2 through AWS APIs and communicates with the Minecraft process over the VPC's private network.
-- **Server EC2** — Larger instance that hosts the Minecraft server. Started and stopped on demand by the bot to save costs.
+- **Server EC2** — Larger instance that hosts the Minecraft server. Started and stopped on demand by the bot to save costs. A **systemd service (`minecraft`)** is enabled on this instance, so the Minecraft server launches automatically every time the instance boots — the bot only needs to start the EC2 instance and the server comes up on its own.
 
 **Route 53** handles DNS for the server's domain, resolving it to TCPShield's proxy addresses. 
 **TCPShield** then sits in front of the Server EC2 as a reverse proxy, providing DDoS protection. Players connect through the domain name, but the bot bypasses both DNS and TCPShield entirely by using the server's private IP within the VPC for status pings (mcstatus) and remote commands (RCON).
@@ -61,20 +61,20 @@ A Discord bot that allows users to manage a modded Minecraft server hosted on AW
 | Command | Description |
 |---------|-------------|
 | `/status` | Check if the cloud server and Minecraft server are running |
-| `/start-cloud` | Start the AWS EC2 instance (takes 3-4 minutes) |
-| `/start-minecraft` | Start the Minecraft server process (takes 2-5 minutes for modded) |
+| `/start` | Start the EC2 instance and Minecraft server in one step (5-9 min total) |
 | `/shut-down` | Stop both the Minecraft server and EC2 instance |
 | `/restart-server` | Restart just the Minecraft server without stopping EC2 |
 | `/ip` | Get the current server IP address |
-| `/info` | Display server info, modpack details, and startup instructions |
+| `/info` | Display server info, version details, and startup instructions |
+
+> **Note:** Starting the Minecraft server is fully automated. A **systemd service** on the Server EC2 launches Minecraft automatically whenever the instance boots, so `/start` only needs to start the EC2 instance and then wait for Minecraft to come online — no separate `/start-minecraft` step is needed.
 
 ### Typical User Flow
 
 1. Run `/status` to check server state
-2. If cloud is offline, run `/start-cloud` and wait 3-4 minutes
-3. Run `/start-minecraft` and wait 2-5 minutes (modded servers take longer)
-4. Join the server using the IP provided
-5. When done, run `/shut-down` or let auto-shutdown handle it
+2. If everything is offline, run `/start` and wait 5-9 minutes — the bot will `@` you when the server is ready
+3. Join the server using the IP provided
+4. When done, run `/shut-down` or let auto-shutdown handle it
 
 ---
 
@@ -114,13 +114,14 @@ Operations that talk directly to the running Minecraft process. Uses the EC2 ins
 |--------|-------------|
 | `is_running()` | Pings the Minecraft server via mcstatus to check if it's responding |
 | `player_count()` | Returns number of online players, or `-1` if unreachable |
-| `start()` | Launches the server via SSM, then polls until it's responding (up to 5 min) |
-| `stop()` | Sends `/stop` via RCON and waits for the server to go offline |
+| `start()` | Runs `systemctl start minecraft` via SSM, then polls until it's responding (up to 5 min) |
+| `stop()` | Runs `systemctl stop minecraft` via SSM and waits for the server to go offline |
+| `poll_server_status()` | Waits up to 5 minutes for the server to start responding to status pings |
 | `random_message()` | Sends a random fact to the server chat via RCON |
 
 ### `embeds.py` - Discord Embed Builders
 
-Factory functions that return styled `discord.Embed` objects for all bot messages (status, start, shutdown, restart, auto-shutdown, info).
+Factory functions that return styled `discord.Embed` objects for all bot messages (`server_ready`, `shutdown`, `restart`, `status`, `info`, `auto_shutdown`).
 
 **AWS Services Used:**
 - **EC2**: Virtual machines — one for the bot, one for the Minecraft server
@@ -144,6 +145,18 @@ The bot includes an automatic shutdown feature to save costs:
 - If players are online, sends a random fact to the server chat
 
 This reduces monthly costs from ~$75-80 to ~$15-20 for typical usage.
+
+---
+
+## Server EC2 - systemd Auto-Launch
+
+The Server EC2 runs the Minecraft server as a **systemd service** named `minecraft`. The service is enabled to start on boot, which means:
+
+- When the bot starts the Server EC2 (via `/start`), Minecraft launches automatically as soon as the OS comes up — no separate start command is needed.
+- The bot controls the running server through SSM by issuing `systemctl start minecraft` / `systemctl stop minecraft` (used by `/restart-server` and `/shut-down` flows).
+- systemd's `TimeoutStopSec` is set to ~120s to give the Java process enough time to save the world and shut down cleanly.
+
+Because of this, the `/start` command simply boots the EC2 instance and then polls (up to 5 minutes) until the Minecraft server responds to status pings.
 
 ---
 
@@ -181,15 +194,27 @@ Used for deployments and manual restarts:
 
 ## CI/CD - GitHub Actions
 
-The project includes automated deployment via GitHub Actions.
+The project includes two GitHub Actions workflows for managing the Bot EC2 instance.
 
-**File:** `.github/workflows/deploy.yml`
+### `deploy.yml` - Automated Deployment
 
 **Trigger:** Push to `master` branch
 
 **What it does:**
 1. SSHs into the Bot EC2 instance
-2. Runs `start.sh` to pull latest code and restart the bot
+2. Runs `start.sh` to pull the latest code and restart the bot
+
+### `start-bot.yml` - Manual Bot Start
+
+**Trigger:** Manual run from the GitHub Actions tab (`workflow_dispatch`)
+
+**What it does:**
+1. SSHs into the Bot EC2 instance
+2. Runs `start.sh` to (re)start the bot
+
+This is useful for bringing the bot back up on demand — for example after the Bot EC2 has been rebooted — without having to push a commit.
+
+Both workflows authenticate over SSH using the `SSH_PRIVATE_KEY`, `SSH_HOST`, and `USER_NAME` repository secrets.
 
 ---
 
