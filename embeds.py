@@ -1,21 +1,10 @@
 import discord
 
 
-def cloud_online(user_mention: str) -> discord.Embed:
+def server_ready(user_mention: str, ip: str) -> discord.Embed:
     embed = discord.Embed(
-        title="☁️ Cloud Server Online!",
-        description=f"{user_mention} The cloud server is now ready!",
-        color=discord.Color.green(),
-    )
-    embed.add_field(name="Next Step", value="Use `/start-minecraft` to start the Minecraft server", inline=False)
-    embed.add_field(name="Status", value="✅ Online", inline=True)
-    return embed
-
-
-def minecraft_started(user_mention: str, ip: str) -> discord.Embed:
-    embed = discord.Embed(
-        title="🎮 Minecraft Server Started!",
-        description=f"Server has been started by {user_mention}",
+        title="🎮 Server Ready!",
+        description=f"{user_mention} The cloud and Minecraft servers are now online!",
         color=discord.Color.green(),
     )
     embed.add_field(name="Server IP", value=f"`{ip}`", inline=False)
@@ -82,7 +71,7 @@ def info(ip: str) -> discord.Embed:
         color=discord.Color.blue(),
     )
     embed.add_field(name="🌐 Server IP", value=f"`{ip}`", inline=False)
-    embed.add_field(name="🎮 Minecraft Version", value="Java Edition 26.1", inline=True)
+    embed.add_field(name="🎮 Minecraft Version", value="Java Edition 26.2", inline=True)
     embed.add_field(name="📦 Server Type", value="Vanilla", inline=True)
     embed.add_field(
         name="🔒 Whitelist",
@@ -93,8 +82,8 @@ def info(ip: str) -> discord.Embed:
         name="🚀 How to Start the Server",
         value=(
             "1️⃣ Use `/status` to check if servers are running\n"
-            "2️⃣ Use `/start-cloud` if the cloud server is offline\n"
-            "3️⃣ Use `/start-minecraft` to launch the Minecraft server"
+            "2️⃣ Use `/start` to boot the cloud + Minecraft server (5-9 min)\n"
+            "3️⃣ Join with the IP above once you're @'d that it's ready"
         ),
         inline=False,
     )
