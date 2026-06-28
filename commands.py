@@ -62,7 +62,9 @@ class ServerCog(commands.Cog):
                 logger.error("/start: EC2 failed to start")
                 await interaction.followup.send("Cloud server failed to start. Please try again or contact Faris.")
                 return
+            # Reset the auto-check timer skip the first check 
             self.first_check = True
+            self.auto_stop.restart()
             logger.info("/start: EC2 ready, waiting for MC to come online")
             # Poll until MC responds
             if not await asyncio.to_thread(self.mc.poll_server_status):
@@ -169,7 +171,7 @@ class ServerCog(commands.Cog):
 
     # ── Auto-Stop Background Task ──────────────────────────────────
 
-    @tasks.loop(minutes=30)
+    @tasks.loop(minutes=10)
     async def auto_stop(self):
         logger.info("auto_stop cycle started")
         if self.first_check:
