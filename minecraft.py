@@ -56,9 +56,13 @@ class MinecraftServer:
     def start(self) -> bool:
         """Launch the MC server via systemctl, then poll until it's responding."""
         logger.info("start called")
-        
 
-        sent = self.ec2.send_ssm_command(["systemctl start minecraft"])
+        # reset-failed clears the StartLimitBurst lockout if MC crash-looped earlier;
+        # it's a no-op when the unit isn't in a failed state.
+        sent = self.ec2.send_ssm_command([
+            "systemctl reset-failed minecraft",
+            "systemctl start minecraft",
+        ])
         if not sent:
             logger.error("start -> False (SSM command failed)")
             return False
