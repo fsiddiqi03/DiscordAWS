@@ -45,32 +45,49 @@ class ServerCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         try:
             ec2_status = await asyncio.to_thread(self.ec2.check_status)
+            if ec2_status in ("pending", "stopping"):
+                logger.info("/start: EC2 currently '%s', wait and retry", ec2_status)
+                await interaction.followup.send(f"Server is currently {ec2_status}. Please wait a minute and try again.")
+                return
+
             mc_status = await asyncio.to_thread(self.mc.is_running)
             if ec2_status == "running" and mc_status:
                 logger.info("/start: everything already running")
                 await interaction.followup.send(f"Server is already up! IP: `{IP}`")
                 return
-            if ec2_status in ("pending", "stopping"):
-                logger.info("/start: EC2 currently '%s', wait and retry", ec2_status)
-                await interaction.followup.send(f"Server is currently {ec2_status}. Please wait a minute and try again.")
-                return
-            await interaction.followup.send(
-                "Starting everything up — this may take 4-5 minutes. I'll @ you when it's ready!"
-            )
-            # Start the EC2. systemd auto-launches Minecraft on EC2 boot.
-            if not await asyncio.to_thread(self.ec2.start):
-                logger.error("/start: EC2 failed to start")
-                await interaction.followup.send("Cloud server failed to start. Please try again or contact Faris.")
-                return
-            # Reset the auto-check timer skip the first check 
-            self.first_check = True
-            self.auto_stop.restart()
-            logger.info("/start: EC2 ready, waiting for MC to come online")
-            # Poll until MC responds
-            if not await asyncio.to_thread(self.mc.poll_server_status):
-                logger.error("/start: MC never came up after 5 minutes")
-                await interaction.followup.send("Cloud is up but Minecraft didn't respond. Contact Faris.")
-                return
+
+            if ec2_status == "running":
+                # Cloud is up but MC is down (stopped manually or crashed).
+                # No boot will happen, so systemd won't auto-launch MC — start it via SSM.
+                logger.info("/start: EC2 running but MC down, starting MC via systemctl")
+                await interaction.followup.send(
+                    "Cloud is already up, starting Minecraft — this should take a minute or two. I'll @ you when it's ready!"
+                )
+                # Reset the auto-check timer, skip the first check
+                self.first_check = True
+                self.auto_stop.restart()
+                if not await asyncio.to_thread(self.mc.start):
+                    logger.error("/start: MC never came up after 5 minutes (systemctl path)")
+                    await interaction.followup.send("Minecraft didn't respond after starting. Contact Faris.")
+                    return
+            else:
+                await interaction.followup.send(
+                    "Starting everything up — this may take 4-5 minutes. I'll @ you when it's ready!"
+                )
+                # Start the EC2. systemd auto-launches Minecraft on EC2 boot.
+                if not await asyncio.to_thread(self.ec2.start):
+                    logger.error("/start: EC2 failed to start")
+                    await interaction.followup.send("Cloud server failed to start. Please try again or contact Faris.")
+                    return
+                # Reset the auto-check timer, skip the first check
+                self.first_check = True
+                self.auto_stop.restart()
+                logger.info("/start: EC2 ready, waiting for MC to come online")
+                if not await asyncio.to_thread(self.mc.poll_server_status):
+                    logger.error("/start: MC never came up after 5 minutes")
+                    await interaction.followup.send("Cloud is up but Minecraft didn't respond. Contact Faris.")
+                    return
+
             logger.info("/start: MC ready")
             await self.send_public_message(interaction, embeds.server_ready(interaction.user.mention, IP))
         except Exception as e:
@@ -171,7 +188,7 @@ class ServerCog(commands.Cog):
 
     # ── Auto-Stop Background Task ──────────────────────────────────
 
-    @tasks.loop(minutes=10)
+    @tasks.loop(minutes=15)
     async def auto_stop(self):
         logger.info("auto_stop cycle started")
         if self.first_check:
@@ -197,7 +214,7 @@ class ServerCog(commands.Cog):
 
             if player_count == 0:
                 self.unreachable_count = 0
-                reason = "Server automatically shut down due to inactivity (0 players for 30 minutes)"
+                reason = "Server automatically shut down due to inactivity (0 players for 15 minutes)"
                 logger.info("auto_stop: 0 players, shutting down EC2")
                 await asyncio.to_thread(self.ec2.stop)
                 channel = self.bot.get_channel(CHANNEL_ID)
