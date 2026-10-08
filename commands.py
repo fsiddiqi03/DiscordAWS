@@ -72,7 +72,7 @@ class ServerCog(commands.Cog):
                     return
             else:
                 await interaction.followup.send(
-                    "Starting everything up — this may take 4-5 minutes. I'll @ you when it's ready!"
+                    "Starting everything up — this may take 1-2 minutes. I'll @ you when it's ready!"
                 )
                 # Start the EC2. systemd auto-launches Minecraft on EC2 boot.
                 if not await asyncio.to_thread(self.ec2.start):
