@@ -110,8 +110,8 @@ class MinecraftServer:
             return None
     
     def poll_server_status(self) -> bool:
-        """Wait up to 5 minutes for the MC server to respond. Modded servers can take a while."""
-        return self._wait_for(self.is_running, attempts=60, interval=5) is not None
+        """Wait up to 2 minutes for the MC server to respond. Modded servers can take a while."""
+        return self._wait_for(self.is_running, attempts=60, interval=2) is not None 
 
     @staticmethod
     def _wait_for(predicate: Callable[[], bool], attempts: int, interval: int) -> int | None:

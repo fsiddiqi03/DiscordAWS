@@ -26,7 +26,7 @@ class EC2Manager:
         return state
 
     def start(self) -> bool:
-        """Start the EC2 instance and wait until status checks pass."""
+        """Start the EC2 instance and wait until it's running."""
         logger.info("start called")
         status = self.check_status()
         if status != "stopped":
@@ -35,9 +35,8 @@ class EC2Manager:
         try:
             logger.info("EC2 is stopped, sending start_instances request")
             self.ec2.start_instances(InstanceIds=[self.instance_id])
-            # Instance status must be okay before the Minecraft server can be launched
-            waiter = self.ec2.get_waiter("instance_status_ok")
-            logger.info("Waiting for instance_status_ok...")
+            waiter = self.ec2.get_waiter("instance_running")
+            logger.info("Waiting for instance_running...")
             waiter.wait(InstanceIds=[self.instance_id])
             logger.info("start -> True (instance now running)")
             return True
