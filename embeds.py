@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import discord
 
 
@@ -97,3 +99,14 @@ def auto_shutdown(reason: str) -> discord.Embed:
         description=reason,
         color=discord.Color.yellow(),
     )
+
+
+def download(url: str, backed_up_at: datetime) -> discord.Embed:
+    embed = discord.Embed(
+        title="💾 World Download",
+        description=f"[Click here to download the latest world backup]({url})",
+        color=discord.Color.blue(),
+    )
+    embed.add_field(name="Backed Up", value=discord.utils.format_dt(backed_up_at, "R"), inline=True)
+    embed.set_footer(text="Link expires in 1 hour")
+    return embed

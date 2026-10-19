@@ -62,10 +62,11 @@ A Discord bot that allows users to manage a modded Minecraft server hosted on AW
 |---------|-------------|
 | `/status` | Check if the cloud server and Minecraft server are running |
 | `/start` | Start the EC2 instance and Minecraft server in one step (5-9 min total) |
-| `/shut-down` | Stop both the Minecraft server and EC2 instance |
+| `/shut-down` | Back up the world to S3, then stop both the Minecraft server and EC2 instance |
 | `/restart-server` | Restart just the Minecraft server without stopping EC2 |
 | `/ip` | Get the current server IP address |
 | `/info` | Display server info, version details, and startup instructions |
+| `/download` | Get a 1-hour download link for the latest world backup |
 
 > **Note:** Starting the Minecraft server is fully automated. A **systemd service** on the Server EC2 launches Minecraft automatically whenever the instance boots, so `/start` only needs to start the EC2 instance and then wait for Minecraft to come online — no separate `/start-minecraft` step is needed.
 
