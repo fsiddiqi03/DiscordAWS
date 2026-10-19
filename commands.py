@@ -112,8 +112,12 @@ class ServerCog(commands.Cog):
                 await interaction.followup.send("Can't close server while people are on!")
                 return
             await interaction.followup.send("Closing server, this may take a few minutes...")
-            # Attempt to close EC2
-            if not await asyncio.to_thread(self.ec2.stop):
+            # Attempt to close EC2 (backs up the world first)
+            stopped, backup_ok = await asyncio.to_thread(self.ec2.stop)
+            if not backup_ok:
+                logger.error("/shut-down: world backup failed")
+                await interaction.followup.send("⚠️ World backup failed — shutting down anyway. Let Faris know.")
+            if not stopped:
                 logger.error("/shut-down: EC2 stop failed")
                 await interaction.followup.send("Failed to stop the server, please try again later")
                 return
@@ -180,6 +184,22 @@ class ServerCog(commands.Cog):
             logger.error("/status error: %s", e, exc_info=True)
             await interaction.followup.send(f"An error occurred: {e}. Please try again later.")
 
+    @discord.app_commands.command(name="download", description="Get a download link for the latest world backup")
+    async def download(self, interaction: discord.Interaction):
+        logger.info("/download invoked by %s", interaction.user)
+        await interaction.response.defer(ephemeral=True)
+        try:
+            backup = await asyncio.to_thread(self.ec2.latest_backup_url)
+            if backup is None:
+                logger.info("/download: no backups found")
+                await interaction.followup.send("No world backups yet — one is made every time the server shuts down.")
+                return
+            url, backed_up_at = backup
+            await interaction.followup.send(embed=embeds.download(url, backed_up_at))
+        except Exception as e:
+            logger.error("/download error: %s", e, exc_info=True)
+            await interaction.followup.send(f"An error occurred: {e}. Please try again later.")
+
     @discord.app_commands.command(name="info", description="Get information about the Minecraft server")
     async def info(self, interaction: discord.Interaction):
         logger.info("/info invoked by %s", interaction.user)
@@ -216,7 +236,9 @@ class ServerCog(commands.Cog):
                 self.unreachable_count = 0
                 reason = "Server automatically shut down due to inactivity (0 players for 15 minutes)"
                 logger.info("auto_stop: 0 players, shutting down EC2")
-                await asyncio.to_thread(self.ec2.stop)
+                _, backup_ok = await asyncio.to_thread(self.ec2.stop)
+                if not backup_ok:
+                    reason += "\n⚠️ World backup failed — let Faris know."
                 channel = self.bot.get_channel(CHANNEL_ID)
                 if channel:
                     await channel.send(embed=embeds.auto_shutdown(reason))
@@ -230,7 +252,9 @@ class ServerCog(commands.Cog):
                 self.unreachable_count = 0
                 reason = f"Server automatically shut down (Minecraft server unreachable for {UNREACHABLE_THRESHOLD} consecutive cycles - likely crashed)"
                 logger.warning("auto_stop: threshold reached, shutting down EC2 — %s", reason)
-                await asyncio.to_thread(self.ec2.stop)
+                _, backup_ok = await asyncio.to_thread(self.ec2.stop)
+                if not backup_ok:
+                    reason += "\n⚠️ World backup failed — let Faris know."
                 channel = self.bot.get_channel(CHANNEL_ID)
                 if channel:
                     await channel.send(embed=embeds.auto_shutdown(reason))
